@@ -1,0 +1,91 @@
+# Web3Signer overlay for the upstream CDVN validator client layer.
+# This keeps the upstream client matrix intact while switching the default
+# Lodestar profile to the external signer flow.
+
+services:
+  vc-lodestar:
+    profiles: [vc-lodestar]
+    image: chainsafe/lodestar:${VC_LODESTAR_VERSION:-v1.40.0}
+    depends_on: [charon]
+    entrypoint: /opt/lodestar/run.sh
+    networks: [dvnode]
+    environment:
+      BEACON_NODE_ADDRESS: http://charon:3600
+      NETWORK: ${NETWORK}
+      BUILDER_API_ENABLED: ${BUILDER_API_ENABLED:-true}
+      BUILDER_SELECTION: ${VC_LODESTAR_BUILDER_SELECTION:-builderalways}
+      WEB3SIGNER_URL: ${WEB3SIGNER_URL}
+      WEB3SIGNER_FETCH: ${WEB3SIGNER_FETCH:-true}
+      WEB3SIGNER_FETCH_INTERVAL_MS: ${WEB3SIGNER_FETCH_INTERVAL_MS:-384000}
+      WEB3SIGNER_PUBLIC_KEYS: ${WEB3SIGNER_PUBLIC_KEYS:-}
+      VC_PORT_METRICS: ${VC_PORT_METRICS:-5064}
+      LODESTAR_DATA_DIR: ${LODESTAR_DATA_DIR:-/opt/data}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - "alloy-monitored=${VC_LODESTAR_ALLOY_MONITORED:-true}"
+    volumes:
+      - ./lodestar/run.sh:/opt/lodestar/run.sh
+      - ./data/lodestar:/opt/data # Keep data in lodestar and not vc-lodestar for backwards compatibility
+    restart: unless-stopped
+
+  vc-nimbus:
+    profiles: [vc-nimbus]
+    image: "nimbus-validator-client:${VC_NIMBUS_VERSION:-multiarch-v26.2.1}"
+    build:
+      context: nimbus
+      args:
+        VERSION: ${VC_NIMBUS_VERSION:-multiarch-v26.2.1}
+    depends_on: [charon]
+    networks: [dvnode]
+    environment:
+      BEACON_NODE_ADDRESS: http://charon:3600
+      BUILDER_API_ENABLED: ${BUILDER_API_ENABLED:-true}
+    labels:
+      - "alloy-monitored=${VC_NIMBUS_ALLOY_MONITORED:-true}"
+    volumes:
+      - ./nimbus/run.sh:/home/user/data/run.sh
+      - .charon/validator_keys:/home/validator_keys
+      - ./data/vc-nimbus:/home/user/data
+    restart: unless-stopped
+
+  vc-prysm:
+    profiles: [vc-prysm]
+    image: offchainlabs/prysm-validator:${VC_PRYSM_VERSION:-v7.1.3}
+    platform: "linux/amd64"
+    depends_on: [charon]
+    networks: [dvnode]
+    entrypoint: /home/prysm/run.sh
+    environment:
+      BEACON_NODE_ADDRESS: http://charon:3600
+      NETWORK: ${NETWORK}
+    labels:
+      - "alloy-monitored=${VC_PRYSM_ALLOY_MONITORED:-true}"
+    volumes:
+      - ./prysm/run.sh:/home/prysm/run.sh
+      - ./data/vc-prysm:/data/vc
+      - .charon/validator_keys:/home/charon/validator_keys
+    restart: unless-stopped
+
+  vc-teku:
+    profiles: [vc-teku]
+    image: consensys/teku:${VC_TEKU_VERSION:-26.3.0}
+    command: |
+      validator-client
+      --beacon-node-api-endpoint "http://charon:3600"
+      --network="${NETWORK}"
+      --data-base-path=/home/data
+      --validator-keys="/opt/charon/validator_keys:/opt/charon/validator_keys"
+      --validators-keystore-locking-enabled false
+      --validators-external-signer-slashing-protection-enabled true
+      --validators-builder-registration-default-enabled ${BUILDER_API_ENABLED:-true}
+      --validators-proposer-default-fee-recipient "0x0000000000000000000000000000000000000000"
+      --Xobol-dvt-integration-enabled true
+    depends_on: [charon]
+    networks: [dvnode]
+    labels:
+      - "alloy-monitored=${VC_TEKU_ALLOY_MONITORED:-true}"
+    volumes:
+      - .charon/validator_keys:/opt/charon/validator_keys
+      - ./data/vc-teku:/home/data
+    restart: unless-stopped

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security issue
+    about: Do not report vulnerabilities or secret exposure through public issues. Follow SECURITY.md.
+    url: https://github.com/OWNER/REPO/security/policy

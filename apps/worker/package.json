@@ -1,0 +1,15 @@
+{
+  "name": "@eth-staking/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@eth-staking/config": "workspace:*",
+    "@eth-staking/observability": "workspace:*"
+  }
+}

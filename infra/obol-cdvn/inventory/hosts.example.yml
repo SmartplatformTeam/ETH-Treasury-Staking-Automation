@@ -1,0 +1,49 @@
+hosts:
+  - name: operator-1
+    address: 203.0.113.11
+    role: dv-operator
+    profile: baseline
+    region: ap-northeast-2
+    nickname: treasury-op-1
+    charonExternalHostname: charon-1.example.com
+    monitoringPeer: peer-1
+    grafanaPort: 3301
+    prometheusPort: 9091
+    sshUser: ubuntu
+    deploymentPath: /opt/obol/treasury-mainnet-obol-a
+  - name: operator-2
+    address: 203.0.113.12
+    role: dv-operator
+    profile: baseline
+    region: ap-northeast-2
+    nickname: treasury-op-2
+    charonExternalHostname: charon-2.example.com
+    monitoringPeer: peer-2
+    grafanaPort: 3302
+    prometheusPort: 9092
+    sshUser: ubuntu
+    deploymentPath: /opt/obol/treasury-mainnet-obol-a
+  - name: operator-3
+    address: 203.0.113.13
+    role: dv-operator
+    profile: baseline
+    region: ap-northeast-2
+    nickname: treasury-op-3
+    charonExternalHostname: charon-3.example.com
+    monitoringPeer: peer-3
+    grafanaPort: 3303
+    prometheusPort: 9093
+    sshUser: ubuntu
+    deploymentPath: /opt/obol/treasury-mainnet-obol-a
+  - name: operator-4
+    address: 203.0.113.14
+    role: dv-operator
+    profile: baseline
+    region: ap-northeast-2
+    nickname: treasury-op-4
+    charonExternalHostname: charon-4.example.com
+    monitoringPeer: peer-4
+    grafanaPort: 3304
+    prometheusPort: 9094
+    sshUser: ubuntu
+    deploymentPath: /opt/obol/treasury-mainnet-obol-a

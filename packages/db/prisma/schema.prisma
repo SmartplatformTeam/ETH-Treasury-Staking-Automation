@@ -1,0 +1,356 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TREASURY_OPERATOR
+  INFRA_OPERATOR
+  APPROVER
+  FINANCE_REVIEWER
+  AUDITOR
+}
+
+enum Network {
+  MAINNET
+  HOLESKY
+  HOODI
+}
+
+enum StrategyType {
+  SOLO
+  DVT
+  POOL
+  RESTAKING
+}
+
+enum ValidatorStatus {
+  PENDING_DEPOSIT
+  ACTIVE
+  EXITING
+  EXITED
+  WITHDRAWAL_PENDING
+  WITHDRAWN
+  SLASHED
+  UNKNOWN
+}
+
+enum HealthStatus {
+  HEALTHY
+  DEGRADED
+  CRITICAL
+  UNKNOWN
+}
+
+enum NodeRole {
+  EXECUTION
+  CONSENSUS
+  VALIDATOR
+  CHARON
+  SIGNER
+  RELAY
+  MONITORING
+}
+
+enum ClusterType {
+  OBOL_DVT
+}
+
+enum SignerProvider {
+  WEB3SIGNER
+}
+
+enum TreasuryAccountType {
+  SAFE
+}
+
+enum ApprovalStatus {
+  REQUESTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalPolicyType {
+  DEPOSIT_REQUEST
+  DKG_CEREMONY
+  SAFE_PROPOSAL
+  SIGNER_BINDING
+  ROLLOUT
+}
+
+enum DepositValidationStatus {
+  PENDING
+  VALID
+  INVALID
+}
+
+enum DepositExecutionStatus {
+  DRAFT
+  EXPORTED
+  SUBMITTED
+  COMPLETED
+  CANCELLED
+}
+
+enum SafeProposalStatus {
+  DRAFT
+  EXPORTED
+  QUEUED
+  EXECUTED
+  CANCELLED
+}
+
+enum DkgCeremonyStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id                String      @id @default(cuid())
+  email             String      @unique
+  name              String
+  role              UserRole
+  requestedApprovals Approval[] @relation("approval_requested_by")
+  approvedApprovals Approval[]  @relation("approval_approved_by")
+  rejectedApprovals Approval[]  @relation("approval_rejected_by")
+  depositRequests   DepositRequest[]
+  auditLogs         AuditLog[]
+  safeProposals     SafeProposal[] @relation("safe_exported_by")
+  dkgCeremonies     DkgCeremony[]  @relation("dkg_initiated_by")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+model OperatorHost {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  address         String       @unique
+  region          String
+  profile         String
+  baselineVersion String
+  overlayVersion  String
+  healthStatus    HealthStatus @default(UNKNOWN)
+  clusterId       String?
+  cluster         Cluster?     @relation(fields: [clusterId], references: [id])
+  nodes           Node[]
+  signers         Signer[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Cluster {
+  id              String        @id @default(cuid())
+  name            String        @unique
+  type            ClusterType
+  network         Network
+  baselineVersion String
+  overlayVersion  String
+  obolClusterId   String?       @unique
+  threshold       Int
+  operatorCount   Int
+  relayMode       String?
+  signerMode      String?
+  charonEnrs      Json?
+  hosts           OperatorHost[]
+  nodes           Node[]
+  signers         Signer[]
+  validators      Validator[]
+  depositRequests DepositRequest[]
+  dkgCeremonies   DkgCeremony[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Signer {
+  id             String         @id @default(cuid())
+  name           String         @unique
+  provider       SignerProvider
+  web3signerUrl  String
+  kmsKeyRef      String
+  keyAlias       String?
+  healthStatus   HealthStatus   @default(UNKNOWN)
+  clusterId      String?
+  hostId         String?
+  cluster        Cluster?       @relation(fields: [clusterId], references: [id])
+  host           OperatorHost?  @relation(fields: [hostId], references: [id])
+  validators     Validator[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model Node {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  role            NodeRole
+  provider        String?
+  region          String
+  hostName        String
+  clientType      String
+  clientVersion   String
+  endpointMetadata Json?
+  healthStatus    HealthStatus @default(UNKNOWN)
+  lastHeartbeatAt DateTime?
+  clusterId       String?
+  hostId          String?
+  cluster         Cluster?     @relation(fields: [clusterId], references: [id])
+  host            OperatorHost? @relation(fields: [hostId], references: [id])
+  validators      Validator[]   @relation("validator_active_node")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Validator {
+  id               String          @id @default(cuid())
+  publicKey        String          @unique
+  validatorIndex   Int?            @unique
+  network          Network
+  status           ValidatorStatus
+  strategyType     StrategyType
+  ownerEntity      String
+  feeRecipient     String
+  withdrawalTarget String
+  signerType       String
+  clusterId        String?
+  signerId         String?
+  activeNodeId     String?
+  cluster          Cluster?        @relation(fields: [clusterId], references: [id])
+  signer           Signer?         @relation(fields: [signerId], references: [id])
+  activeNode       Node?           @relation("validator_active_node", fields: [activeNodeId], references: [id])
+  rewardLedgers    RewardLedger[]
+  createdAt        DateTime        @default(now())
+  archivedAt       DateTime?
+}
+
+model TreasuryAccount {
+  id           String              @id @default(cuid())
+  label        String
+  type         TreasuryAccountType
+  network      Network
+  safeAddress  String              @unique
+  chainId      Int
+  isOvmAccount Boolean             @default(true)
+  safeProposals SafeProposal[]
+  depositRequests DepositRequest[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model DepositRequest {
+  id                     String                  @id @default(cuid())
+  requestNumber          String                  @unique
+  network                Network
+  ownerEntity            String
+  validatorCount         Int
+  depositDataObjectKey   String
+  validationStatus       DepositValidationStatus @default(PENDING)
+  approvalStatus         ApprovalStatus          @default(REQUESTED)
+  executionStatus        DepositExecutionStatus  @default(DRAFT)
+  exportedPayloadObjectKey String?
+  requestedById          String
+  clusterId              String?
+  treasuryAccountId      String?
+  safeProposalId         String?                 @unique
+  dkgCeremonyId          String?
+  requestedBy            User                    @relation(fields: [requestedById], references: [id])
+  cluster                Cluster?                @relation(fields: [clusterId], references: [id])
+  treasuryAccount        TreasuryAccount?        @relation(fields: [treasuryAccountId], references: [id])
+  safeProposal           SafeProposal?           @relation(fields: [safeProposalId], references: [id])
+  dkgCeremony            DkgCeremony?            @relation(fields: [dkgCeremonyId], references: [id])
+  approvals              Approval[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+model Approval {
+  id            String             @id @default(cuid())
+  resourceType  String
+  resourceId    String
+  policyType    ApprovalPolicyType
+  currentStep   Int                @default(1)
+  finalStatus   ApprovalStatus     @default(REQUESTED)
+  requestedById String
+  approvedById  String?
+  rejectedById  String?
+  depositRequestId String?
+  requestedBy   User               @relation("approval_requested_by", fields: [requestedById], references: [id])
+  approvedBy    User?              @relation("approval_approved_by", fields: [approvedById], references: [id])
+  rejectedBy    User?              @relation("approval_rejected_by", fields: [rejectedById], references: [id])
+  depositRequest DepositRequest?   @relation(fields: [depositRequestId], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model SafeProposal {
+  id               String             @id @default(cuid())
+  proposalNumber   String             @unique
+  treasuryAccountId String
+  status           SafeProposalStatus @default(DRAFT)
+  description      String
+  payloadObjectKey String?
+  safeTxHash       String?            @unique
+  exportedById     String?
+  treasuryAccount  TreasuryAccount    @relation(fields: [treasuryAccountId], references: [id])
+  exportedBy       User?              @relation("safe_exported_by", fields: [exportedById], references: [id])
+  depositRequest   DepositRequest?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+model DkgCeremony {
+  id                  String            @id @default(cuid())
+  ceremonyNumber      String            @unique
+  clusterId           String
+  initiatedById       String?
+  status              DkgCeremonyStatus @default(PLANNED)
+  operatorCount       Int
+  validatorCount      Int
+  baselineVersion     String
+  overlayVersion      String
+  clusterLockObjectKey String?
+  depositDataObjectKey String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  cluster             Cluster           @relation(fields: [clusterId], references: [id])
+  initiatedBy         User?             @relation("dkg_initiated_by", fields: [initiatedById], references: [id])
+  depositRequests     DepositRequest[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+}
+
+model RewardLedger {
+  id                 String   @id @default(cuid())
+  validatorId        String
+  periodStart        DateTime
+  periodEnd          DateTime
+  consensusReward    Decimal  @db.Decimal(20, 8)
+  executionReward    Decimal  @db.Decimal(20, 8)
+  mevReward          Decimal  @db.Decimal(20, 8)
+  penalties          Decimal  @db.Decimal(20, 8)
+  infraCostAllocated Decimal  @db.Decimal(20, 8)
+  netReward          Decimal  @db.Decimal(20, 8)
+  validator          Validator @relation(fields: [validatorId], references: [id])
+  createdAt          DateTime @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  actionType   String
+  resourceType String
+  resourceId   String
+  diff         Json?
+  actor        User?    @relation(fields: [actorId], references: [id])
+  createdAt    DateTime @default(now())
+}

@@ -1,0 +1,20 @@
+cluster:
+  name: treasury-mainnet-obol-a
+  network: mainnet
+  baselineVersion: v1.9.5
+  overlayProfiles: web3signer,observability
+  threshold: 3
+  operatorCount: 4
+  composeEnvSample: .env.sample.mainnet
+  signerMode: web3signer-kms
+  relayMode: obol-default
+  monitoringClusterName: treasury-mainnet-obol-a
+  serviceOwner: treasury-ops
+  web3signerUrl: http://host.docker.internal:9000
+  web3signerMetricsTarget: host.docker.internal:9000
+  web3signerFetch: true
+  web3signerFetchIntervalMs: 384000
+  feeRecipientAddress: 0x0000000000000000000000000000000000000000
+  healthSyncUrl: http://host.docker.internal:4000/v1/internal/cdvn/health-sync
+  deploymentRoot: /opt/obol/treasury-mainnet-obol-a
+  approvalPolicy: rollout

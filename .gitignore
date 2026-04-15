@@ -1,0 +1,36 @@
+node_modules
+.next
+.turbo
+dist
+.env
+.env.local
+**/.env
+coverage
+packages/db/src/generated
+packages/db/src/generated/prisma
+*.log
+
+# Local runtime artifacts and dry-run outputs
+.tmp-cdvn-*
+.tmp-cdvn*/
+
+# Real ops inventory files should stay outside the public repo
+infra/obol-cdvn/inventory/cluster.yml
+infra/obol-cdvn/inventory/hosts.yml
+
+# Runtime metadata and staged artifacts
+**/render-bundle.env
+**/render-metadata.env
+**/charon-artifacts-staging.env
+**/cluster-lock.json
+**/charon-enr-private-key
+**/validator-pubkeys.txt
+**/jwt.hex
+**/.charon/
+
+# TLS / signer / KMS related materials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx

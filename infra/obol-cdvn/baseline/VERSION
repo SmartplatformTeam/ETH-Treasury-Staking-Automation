@@ -1,0 +1,6 @@
+UPSTREAM_REPO=ObolNetwork/charon-distributed-validator-node
+UPSTREAM_REF=v1.9.5
+UPSTREAM_COMMIT=d8110b1945a5d4d9e21827d5cae94e837bbcb457
+MIRRORED_AT=2026-04-15
+MIRROR_LAYOUT=baseline/upstream
+EXCLUDED_PATHS=.git,.github,.githooks,DVNode.png,jwt/jwt.hex

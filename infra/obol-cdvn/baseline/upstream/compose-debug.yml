@@ -1,0 +1,52 @@
+# Docker-compose file to aid developers in debugging. This is not required for "normal" users. See the "Docker power users" section of the README.md for more info.
+
+# Override any defaults specified by `${FOO:-bar}` in `.env` with `FOO=qux`.
+# See .env.sample "Debug Config" section
+
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.55.1}
+    command: --raw_cgroup_prefix_whitelist=/docker/ --disable_metrics=hugetlb
+    privileged: true
+    volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:ro"
+      - "/sys:/sys:ro"
+      - "/var/lib/docker/:/var/lib/docker:ro"
+      - "/dev/disk/:/dev/disk:ro"
+    devices:
+      - "/dev/kmsg:/dev/kmsg"
+    restart: unless-stopped
+
+  node-exporter:
+    image: bitnamilegacy/node-exporter:${NODE_EXPORTER_VERSION:-1.9.1}
+
+  tempo:
+    image: grafana/tempo:${TEMPO_VERSION:-2.10.2}
+    user: ":"
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./tempo:/etc/tempo
+      - ./data/tempo:/opt/tempo
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:${LOKI_VERSION:-3.6.7}
+    user: ":"
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml
+      - ./data/loki:/loki
+    restart: unless-stopped
+
+  charon:
+    environment:
+      - CHARON_OTLP_ADDRESS=tempo:4317
+      - CHARON_OTLP_SERVICE_NAME=charon
+      - CHARON_LOKI_ADDRESSES=${CHARON_LOKI_ADDRESSES:-http://loki:3100/loki/api/v1/push}
+      - CHARON_LOKI_SERVICE=charon
+
+networks:
+  default:
+    name: ${CHARON_DOCKER_NETWORK:-charon-distributed-validator-node_dvnode}
+    external: true
