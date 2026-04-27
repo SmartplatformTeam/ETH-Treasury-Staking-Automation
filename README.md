@@ -18,6 +18,10 @@
 
 - `docs/README.md`
   - 제품 범위, 아키텍처, 현재 구현 상태, CDVN runtime automation, inventory, secret, Web3Signer/KMS, approval/audit, observability, bring-up runbook, 공개 저장소 안전 체크를 통합한 단일 운영 문서
+- `docs/local-runtime-test.md`
+  - 실제 DKG artifact 없이 로컬에서 operator-local render/stage/verify와 rollout exclude 경계를 검증하는 smoke test runbook
+- `docs/sole-ownership-and-key-control-draft.md`
+  - Safe 기반 단독 소유권 입증, 3-of-4 signer governance, Obol DKG 세레머니, key share 노출 통제, 단일 위치 재조합 부존재 입증을 위한 제출용 문서 초안
 - `AGENTS.md`
   - Harness Engineering, Codex, 구현 에이전트에게 전달할 작업 원칙과 제약
 - `CONTRIBUTING.md`
