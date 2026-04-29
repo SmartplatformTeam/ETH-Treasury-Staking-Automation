@@ -169,6 +169,136 @@
 | 참석자 및 승인자 서명부 | 위원, 준법감시인, 지정 임원, 필요 시 참관자 서명 |
 | 이사회 승인서 | 상위 규정상 금액 또는 중요도 기준으로 이사회 승인이 필요한 경우 첨부 |
 
+`02_클러스터_정의/`에는 다음 문서를 보관한다.
+
+```text
+02_클러스터_정의/
+  01_cluster-definition.json
+  02_클러스터_정의_검토서.md
+  03_operator_ENR_매핑표.csv
+  04_클러스터_정의_hash.txt
+  05_Obol_GUI_또는_CLI_생성_증빙.pdf
+  06_주요_파라미터_승인값_대조표.md
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| `cluster-definition.json` | DKG 실행 전 기준 파일. operator address, Charon ENR, withdrawal address, fee recipient, validator count 등 포함 |
+| 클러스터 정의 검토서 | cluster name, network, operator count, threshold, validator count, withdrawal address, fee recipient 검토 결과 |
+| operator ENR 매핑표 | operator별 담당자, operator address, public ENR, 생성 방식, 생성 일시, 등록 위치 |
+| 클러스터 정의 hash | `cluster-definition.json`의 SHA256 또는 Obol에서 제공하는 definition/config hash |
+| Obol GUI 또는 CLI 생성 증빙 | GUI 사용 시 화면 캡처, CLI 사용 시 secret이 제거된 command log 및 version 정보 |
+| 주요 파라미터 승인값 대조표 | 위원회 승인값과 실제 cluster definition 값이 일치하는지 항목별 대조 |
+
+`03_출금_자격증명_검증/`에는 다음 문서를 보관한다.
+
+```text
+03_출금_자격증명_검증/
+  01_deposit_data.json
+  02_deposit_data_hash.txt
+  03_validator_목록.csv
+  04_withdrawal_credentials_검증표.csv
+  05_withdrawal_address_도출_근거.md
+  06_Beacon_state_조회결과.json
+  07_검증자_서명확인서.pdf
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| `deposit_data.json` | validator public key, withdrawal credentials, deposit amount, signature 등 deposit 관련 데이터 |
+| deposit data hash | `deposit_data.json` 원본성 확인용 SHA256 |
+| validator 목록 | validator public key, cluster, validator index, owner entity, deposit request ID |
+| withdrawal credentials 검증표 | deposit data상 credentials, Beacon state상 credentials, 도출된 Safe address, 일치 여부 |
+| withdrawal address 도출 근거 | execution withdrawal credentials에서 Safe address를 도출한 방식 및 계산 근거 |
+| Beacon state 조회결과 | 내부 Beacon API 또는 block explorer에서 조회한 validator state export |
+| 검증자 서명확인서 | Finance reviewer, Security reviewer, Audit reviewer의 확인 및 서명 |
+
+`04_Safe_온체인_증빙/`에는 다음 문서를 보관한다.
+
+```text
+04_Safe_온체인_증빙/
+  01_Safe_주소_및_네트워크.md
+  02_Safe_read_contract_조회결과.json
+  03_Safe_owner_snapshot.txt
+  04_Safe_owner_threshold_캡처.pdf
+  05_Safe_owner_변경이력.csv
+  06_Safe_module_guard_검토서.md
+  07_Safe_transaction_관련_tx_hash_목록.csv
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| Safe 주소 및 네트워크 | Safe address, chain ID, Etherscan URL, Safe UI URL, 사용 목적 |
+| Safe read contract 조회결과 | `getOwners()`, `getThreshold()` 등 on-chain read result |
+| Safe owner snapshot | snapshot block, snapshot time, threshold, owner 4개 주소 |
+| Safe owner/threshold 캡처 | Etherscan read contract 또는 Safe UI의 owner/threshold 화면 캡처 |
+| Safe owner 변경이력 | `AddedOwner`, `RemovedOwner`, `ChangedThreshold` event의 tx hash, block, 변경 사유 |
+| Safe module/guard 검토서 | module, guard, fallback handler 등 제3자 독립 실행 가능성을 만들 수 있는 설정 검토 |
+| Safe transaction 관련 tx hash 목록 | deposit, signer change, module change 등 관련 Safe transaction hash 목록 |
+
+`05_Safe_서명자_거버넌스/`에는 다음 문서를 보관한다.
+
+```text
+05_Safe_서명자_거버넌스/
+  01_Safe_서명자_권한배정표.md
+  02_서명자별_주소_소유_확인서.pdf
+  03_서명자별_key_custody_인수인계서.pdf
+  04_서명자별_이해상충_확인서.pdf
+  05_서명자_rotation_정책.md
+  06_비상복구_권한_및_절차서.md
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| Safe 서명자 권한배정표 | 4명 signer의 역할, 실명, 부서, 직책, signer address, 승인 범위 |
+| 서명자별 주소 소유 확인서 | 각 signer가 해당 Safe owner address를 통제한다는 확인 및 서명 |
+| key custody 인수인계서 | hardware wallet 또는 policy signer 보관 책임, 보관 장소, 인수인계 일시 |
+| 이해상충 확인서 | signer가 관련 거래 또는 운영 결정에 대해 이해상충이 없음을 확인 |
+| signer rotation 정책 | 퇴사, 보직 변경, 휴직, 분실, 보안 사고 발생 시 owner 변경 절차 |
+| 비상복구 권한 및 절차서 | signer 유실, 장애, 긴급 사고 발생 시 3-of-4 구조를 유지하며 복구하는 절차 |
+
+`06_조직도_및_직무분리_증빙/`에는 다음 문서를 보관한다.
+
+```text
+06_조직도_및_직무분리_증빙/
+  01_최신_조직도.pdf
+  02_서명자별_재직_및_부서_확인서.pdf
+  03_직무분리_검토서.md
+  04_권한위임_또는_내부결재_규정.pdf
+  05_HR_event_통보_및_signer_rotation_연계절차.md
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| 최신 조직도 | signer 4명이 서로 다른 부서 또는 상이한 조직에 속함을 보여주는 조직도 |
+| 재직 및 부서 확인서 | signer별 실명, 부서, 직책, 재직 상태, 기준일 |
+| 직무분리 검토서 | 기안, 재무승인, 보안승인, 비상복구 역할이 독립적으로 분리되어 있는지 검토 |
+| 권한위임 또는 내부결재 규정 | signer 권한 부여의 내부 근거 및 위임 체계 |
+| HR event 연계절차 | 퇴사, 전보, 휴직, 징계, 보안 사고 발생 시 Safe owner 변경 검토 trigger |
+
+`07_감사로그_내보내기/`에는 다음 문서를 보관한다.
+
+```text
+07_감사로그_내보내기/
+  01_approval_log_export.csv
+  02_deposit_request_audit_log.csv
+  03_DKG_ceremony_audit_log.csv
+  04_Safe_payload_export_log.csv
+  05_runtime_stage_rollout_log.csv
+  06_hash_manifest.txt
+  07_로그_보관_및_무결성_확인서.md
+```
+
+| 문서 | 주요 내용 |
+| --- | --- |
+| approval log export | approval ID, policy type, resource ID, 요청자, 승인자, 승인시각, 최종상태 |
+| deposit request audit log | deposit request 생성, 검증, 승인, export, submit tracking 이력 |
+| DKG ceremony audit log | DKG plan, 참석자, 실행 시각, 산출물 hash, close sign-off 이력 |
+| Safe payload export log | Safe proposal payload 생성자, payload object key, safeTxHash, export 시각 |
+| runtime stage/rollout log | `charon-artifact-stage`, rollout approval, stage metadata, rollout 결과 |
+| hash manifest | 제출 패키지 내 주요 파일의 SHA256 목록 |
+| 로그 보관 및 무결성 확인서 | audit log 보관 위치, 보관 기간, 변경 방지 방식, 검토자 확인 |
+
 ### 제 8 조 (Withdrawal Credentials의 Safe 귀속 증빙)
 
 1. 모든 validator의 withdrawal credentials는 회사가 승인한 Safe multisig address로 귀속되어야 한다.
