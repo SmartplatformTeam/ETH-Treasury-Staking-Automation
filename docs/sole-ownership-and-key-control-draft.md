@@ -30,18 +30,45 @@
 
 본 지침에서 사용하는 용어의 정의는 다음과 같다.
 
-1. "DVT"란 여러 operator가 하나의 Ethereum validator duty를 threshold 방식으로 수행하는 Distributed Validator Technology를 의미한다.
-2. "Obol DKG Ceremony"란 Obol Charon client들이 cluster definition에 따라 validator key share를 분산 생성하는 절차를 말한다.
-3. "Cluster Definition"이란 DKG 실행 전 cluster 조건, operator address, Charon ENR, withdrawal address, fee recipient, validator count 등을 정의하는 `cluster-definition.json` 또는 Obol Launchpad proposal을 의미한다.
-4. "Cluster Lock"이란 DKG 완료 후 생성되는 `cluster-lock.json`으로서, distributed validator public key, operator, threshold, cluster hash 등 Charon runtime에 필요한 정보를 포함하는 파일을 의미한다.
-5. "Withdrawal Credentials"란 Ethereum validator의 출금 권한이 귀속되는 credential을 의미하며, 회사 운영에서는 Safe multisig address로 귀속되어야 한다.
-6. "Safe"란 회사가 treasury execution 및 OVM 계정으로 사용하는 Safe multisig contract를 의미한다.
-7. "Signer"란 Safe owner address의 개인키를 보유하거나 회사가 승인한 policy signer 권한을 가진 임직원 또는 지정 권한자를 의미한다.
-8. "Charon ENR"이란 Charon client가 DKG 및 cluster peer 통신에서 자신을 식별하기 위해 사용하는 Ethereum Node Record를 의미한다.
-9. "`charon-enr-private-key`"란 Charon ENR 생성을 위한 host-local network identity secret을 의미한다. 이는 withdrawal private key 또는 validator signing key가 아니나, DKG 참여와 cluster 연결에 필요한 운영상 민감정보로 관리한다.
-10. "Validator key share"란 DKG를 통해 각 operator에게 분산 생성되는 validator signing key 조각을 의미한다.
-11. "원본 key share"란 Web3Signer/KMS import 또는 host-local signer custody에 투입되기 전의 validator keystore, password, key share file 등 raw signing key material을 의미한다.
-12. "증빙 패키지"란 회계법인, 준법감시인, 내부 감사인이 검토할 수 있도록 보관하는 온체인 링크, hash manifest, 승인 문서, 캡처, audit log, 참석자 확인서, 조직도 및 검증 결과 파일을 의미한다.
+1. "Ethereum" 또는 "이더리움"이란 ETH를 기본 자산으로 사용하는 public blockchain network를 의미한다. 본 지침에서 Ethereum은 회사가 staking 대상으로 삼는 blockchain network를 말한다.
+2. "ETH"란 Ethereum network의 native digital asset을 의미한다. 회사가 staking하는 원금 자산 및 staking reward의 기본 단위다.
+3. "Blockchain" 또는 "블록체인"이란 거래 및 상태 변경 내역이 여러 참여자에게 분산 기록되는 원장 기술을 의미한다. Ethereum의 validator deposit, withdrawal credentials, Safe transaction, reward 등은 blockchain에서 검증 가능한 기록으로 남는다.
+4. "Wallet Address" 또는 "주소"란 Ethereum network에서 자산을 보유하거나 contract와 상호작용할 수 있는 식별자를 의미한다. 주소 자체는 공개 정보이며, 해당 주소를 통제하려면 대응되는 개인키 또는 multisig governance가 필요하다.
+5. "Private Key" 또는 "개인키"란 특정 주소 또는 validator signing 권한을 행사하기 위해 필요한 비밀값을 의미한다. 본 지침에서 개인키에는 Safe signer key, validator key share, keystore password, raw signing key material 등 회사 자산 또는 validator duty에 영향을 줄 수 있는 민감정보가 포함된다.
+6. "Multisig"란 거래 실행 또는 권한 행사를 위해 복수의 signer 승인을 요구하는 구조를 의미한다. 본 지침의 Safe는 4명 signer 중 3명 이상이 승인해야 transaction을 실행할 수 있는 3-of-4 multisig 구조를 사용한다.
+7. "Safe"란 회사가 treasury execution 및 OVM 계정으로 사용하는 Safe multisig contract를 의미한다. 회사 운영에서는 staking된 ETH의 withdrawal credentials가 Safe address로 귀속되어야 하며, Safe owner와 threshold는 on-chain으로 검증 가능해야 한다.
+8. "Signer"란 Safe owner address의 개인키를 보유하거나 회사가 승인한 policy signer 권한을 가진 임직원 또는 지정 권한자를 의미한다. Signer는 기안자, 재무승인, 보안승인, 비상복구 역할로 구분한다.
+9. "Staking" 또는 "스테이킹"이란 Ethereum network의 validator로 참여하기 위해 ETH를 예치하고, validator duty를 수행함으로써 protocol reward를 수취하는 행위를 의미한다. Staking은 원금 ETH가 특정 validator와 withdrawal credentials에 연결되므로, 예치 전 승인, 출금 권한 확인, reward 회계처리 및 slashing risk 관리가 필요하다.
+10. "Validator" 또는 "검증인"이란 Ethereum proof-of-stake network에서 block proposal, attestation 등 consensus duty를 수행하는 주체를 의미한다. Ethereum validator는 validator public key로 식별되며, validator duty를 올바르게 수행하면 reward를 받고, 잘못 수행하거나 악의적 행위가 발생하면 penalty 또는 slashing을 받을 수 있다.
+11. "Validator Public Key"란 validator를 식별하는 공개키를 의미한다. 회계 및 감사 증빙에서는 validator public key를 기준으로 deposit data, Beacon state, cluster lock, reward ledger를 연결한다.
+12. "Validator Signing Key"란 validator duty에 필요한 서명 권한을 가진 key material을 의미한다. 본 운영 모델에서는 validator signing key raw material을 애플리케이션 DB 또는 공개 repository에 저장하지 않으며, Web3Signer + KMS 경로 밖으로 복제하지 않는다.
+13. "Validator Key Share"란 DKG를 통해 각 operator에게 분산 생성되는 validator signing key 조각을 의미한다. 단일 key share만으로는 validator duty를 완전히 수행할 수 없도록 threshold 구조로 운영되며, 각 key share는 operator별로 분리 관리한다.
+14. "Keystore"란 validator signing key 또는 key share를 암호화하여 저장하는 파일 형식을 의미한다. Keystore 파일과 password는 raw signing key material에 준하는 고위험 민감정보로 관리한다.
+15. "Deposit" 또는 "예치"란 validator를 활성화하기 위해 ETH를 Ethereum deposit contract에 예치하는 행위를 의미한다. 회사 운영에서는 deposit transaction을 자동 서명하지 않으며, deposit data와 withdrawal credentials 검증 후 Safe approval 절차를 거쳐야 한다.
+16. "Deposit Data"란 validator deposit에 필요한 validator public key, withdrawal credentials, deposit amount, signature 등을 포함하는 data file을 의미한다. 회계감사에서는 deposit data hash와 withdrawal credentials 검증 결과를 보관한다.
+17. "Withdrawal Credentials"란 Ethereum validator의 출금 권한이 귀속되는 credential을 의미한다. 회사 운영에서는 withdrawal credentials가 회사 Safe multisig address로 귀속되어야 하며, 이는 staking된 ETH의 경제적 통제권 입증에 핵심 증빙이 된다.
+18. "Fee Recipient"란 block proposal 또는 execution layer reward가 지급되는 Ethereum address를 의미한다. Fee recipient는 withdrawal credentials와 다른 개념이며, reward 수취 및 회계처리 관점에서 별도로 관리한다.
+19. "Staking Reward" 또는 "스테이킹 보상"이란 validator duty 수행으로 발생하는 consensus reward, execution reward, MEV 관련 수취액 등을 의미한다. Staking reward는 원금 ETH와 구분하여 식별, 기록, 관리한다.
+20. "Penalty"란 validator duty 미이행, offline 상태, sync 문제 등으로 발생할 수 있는 protocol-level 손실을 의미한다.
+21. "Slashing"이란 double signing, surround vote 등 Ethereum protocol이 금지하는 행위가 발생할 경우 validator stake 일부가 삭감되는 중대한 penalty를 의미한다. Slashing risk가 있는 failover, signer 변경, validator 재활성화는 자동 실행하지 않는다.
+22. "DVT"란 여러 operator가 하나의 Ethereum validator duty를 threshold 방식으로 수행하는 Distributed Validator Technology를 의미한다. DVT는 단일 node 또는 단일 key holder 장애에 대한 복원력을 높이지만, key share 생성·보관·운영에 대한 별도 통제가 필요하다.
+23. "Obol Network"란 Ethereum DVT 운영을 위한 Charon client, DKG, cluster coordination 도구 등을 제공하는 protocol 및 ecosystem을 의미한다. 본 지침은 Obol Network 기반 DVT 운영을 전제로 한다.
+24. "Charon"이란 Obol Network의 DVT middleware client를 의미한다. Charon은 operator 간 consensus duty coordination, peer communication, validator client와 signer 연결을 담당한다.
+25. "Operator"란 DVT cluster에서 Charon node 및 관련 validator runtime을 운영하는 주체를 의미한다. 본 운영 모델은 4개의 operator host를 기준으로 하며, 각 operator는 자기 key share와 runtime artifact만 보유한다.
+26. "Operator Host"란 Charon, validator client, observability component 등 DVT runtime이 실행되는 bare-metal 또는 승인된 server 환경을 의미한다. Operator host는 host-local secret과 deployment artifact의 보관 경계가 된다.
+27. "Charon ENR"이란 Charon client가 DKG 및 cluster peer 통신에서 자신을 식별하기 위해 사용하는 Ethereum Node Record를 의미한다. ENR은 node identity와 연결 정보를 나타내는 public artifact이며, 자산 소유권 또는 출금 권한 증빙으로 사용하지 않는다.
+28. "`charon-enr-private-key`"란 Charon ENR 생성을 위한 host-local network identity secret을 의미한다. 이는 withdrawal private key 또는 validator signing key가 아니나, DKG 참여와 cluster 연결에 필요한 운영상 민감정보로 관리한다.
+29. "DKG" 또는 "분산 키 생성"이란 validator signing key를 단일 위치에서 생성하지 않고 여러 operator가 protocol에 참여하여 key share를 분산 생성하는 절차를 의미한다.
+30. "Obol DKG Ceremony"란 Obol Charon client들이 cluster definition에 따라 validator key share를 분산 생성하는 공식 실행 절차를 말한다. 본 지침에서는 DKG 사전 승인, ENR 등록, 실행 환경 통제, 산출물 검증, 참관자 확인까지 포함한다.
+31. "Cluster Definition"이란 DKG 실행 전 cluster 조건, operator address, Charon ENR, withdrawal address, fee recipient, validator count 등을 정의하는 `cluster-definition.json` 또는 Obol Launchpad proposal을 의미한다.
+32. "Cluster Lock"이란 DKG 완료 후 생성되는 `cluster-lock.json`으로서, distributed validator public key, operator, threshold, cluster hash 등 Charon runtime에 필요한 정보를 포함하는 파일을 의미한다.
+33. "Web3Signer"란 validator client가 로컬 keystore를 직접 사용하지 않고 외부 signer endpoint를 통해 validator duty signature를 요청하도록 하는 remote signer component를 의미한다.
+34. "KMS"란 Key Management Service를 의미하며, key material의 생성, 보관, 사용 권한, audit log를 관리하는 보안 시스템을 말한다. 본 운영 모델에서는 Web3Signer와 KMS를 결합하여 validator signing path를 통제한다.
+35. "Raw Key Material" 또는 "원본 key material"이란 암호화되기 전 또는 import 과정에서 노출될 수 있는 validator signing key, key share, keystore password, seed, mnemonic 등 비밀값을 의미한다.
+36. "원본 key share"란 Web3Signer/KMS import 또는 host-local signer custody에 투입되기 전의 validator keystore, password, key share file 등 raw signing key material을 의미한다.
+37. "Approval Workflow"란 deposit request, DKG ceremony, Safe proposal, signer binding, rollout 등 위험 작업을 사람이 검토하고 승인하는 절차를 의미한다.
+38. "Audit Log"란 누가, 언제, 어떤 자원에 대해 어떤 승인·변경·실행을 수행했는지 기록하는 감사 추적 정보를 의미한다.
+39. "증빙 패키지"란 회계법인, 준법감시인, 내부 감사인이 검토할 수 있도록 보관하는 온체인 링크, hash manifest, 승인 문서, 캡처, audit log, 참석자 확인서, 조직도 및 검증 결과 파일을 의미한다.
 
 ### 제 4 조 (상위 규정과의 관계)
 
