@@ -1,5 +1,5 @@
 ---
-- name: Preview CDVN health sync payload on operator host
+- name: Run CDVN health sync on operator host
   hosts: operator_hosts
   gather_facts: false
   roles:

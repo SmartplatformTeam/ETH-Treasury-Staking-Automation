@@ -1,0 +1,6 @@
+---
+- name: Deploy ETH Treasury Staking control plane
+  hosts: control_plane
+  gather_facts: true
+  roles:
+    - control_plane

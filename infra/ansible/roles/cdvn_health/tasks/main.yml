@@ -11,3 +11,20 @@
       - "{{ health_sync_endpoint_url }}"
       - --dry-run
   changed_when: false
+  when: not (execute | default(false) | bool)
+
+- name: Submit health sync payload
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/health-sync.sh"
+      - --render-dir
+      - "{{ deployment_path }}"
+      - --host-name
+      - "{{ host_name | default(inventory_hostname) }}"
+      - --endpoint-url
+      - "{{ health_sync_endpoint_url }}"
+  environment:
+    HEALTH_SYNC_TOKEN: "{{ health_sync_token | default('') }}"
+  changed_when: true
+  no_log: true
+  when: execute | default(false) | bool

@@ -4,6 +4,8 @@
 
 It does not replace the CDVN scripts and does not create hosts, secrets, keys, DKG artifacts, or Terraform state.
 
+It also includes a minimal control-plane deployment role for the Web/API/Postgres-facing application host. That role prepares a release directory, applies the Prisma schema, builds the monorepo, registers systemd services, and verifies API/Web health.
+
 ## Directory Structure
 
 ```text
@@ -12,6 +14,7 @@ infra/ansible
 ├── group_vars/all.example.yml
 ├── inventories/example/hosts.yml
 ├── playbooks
+│   ├── control-plane.yml
 │   ├── bootstrap-host.yml
 │   ├── render-runtime.yml
 │   ├── verify-runtime.yml
@@ -22,6 +25,7 @@ infra/ansible
 │   ├── health-sync.yml
 │   └── full-operator-mvp.yml
 └── roles
+    ├── control_plane
     ├── common
     ├── cdvn_runtime
     ├── cdvn_artifacts
@@ -31,7 +35,17 @@ infra/ansible
 
 ## Example Inventory
 
-`inventories/example/hosts.yml` contains placeholder operator hosts only:
+`inventories/example/hosts.yml` contains public-safe placeholder hosts:
+
+- `control_plane_1`
+- `operator_1`
+- `operator_2`
+- `operator_3`
+- `operator_4`
+
+`control_plane_1` is the host that runs the Web/API services. The example variables intentionally use `REPLACE_WITH_*` values and must be replaced by a private inventory or extra-vars file before execution.
+
+The operator group contains:
 
 - `operator_1`
 - `operator_2`
@@ -51,6 +65,14 @@ The target is an already-prepared bare-metal operator host reachable by Ansible.
 - `jq`
 - `ca-certificates`
 - `chrony` or an equivalent time sync service
+
+The control-plane host must have:
+
+- Node.js 20+
+- Corepack
+- `pnpm`
+- outbound access to the configured PostgreSQL database
+- systemd
 
 The host-local secure paths are assumed to exist or be created as directories only:
 
@@ -77,9 +99,72 @@ Execute playbooks expect host-local approval files, for example:
 
 The backend stores the approval id and metadata. It does not store approval env contents.
 
+## Control Plane Deployment
+
+The control-plane deployment role expects private values for:
+
+- `control_plane_database_url`
+- `control_plane_auth_secret`
+- `control_plane_health_sync_token`
+- `control_plane_api_base_url`
+- `control_plane_app_base_url`
+
+Example:
+
+```bash
+ansible-playbook \
+  -i infra/ansible/inventories/prod/hosts.yml \
+  infra/ansible/playbooks/control-plane.yml \
+  --extra-vars @infra/ansible/private/control-plane.vars.yml
+```
+
+The role performs:
+
+1. validates required runtime variables
+2. creates an application user and directories
+3. checks Node.js 20+ and pnpm
+4. builds a local public-safe release archive from the repository
+5. unpacks the archive on the control-plane host
+6. runs `pnpm install --frozen-lockfile`
+7. generates Prisma client
+8. applies schema with `pnpm db:push` by default
+9. optionally runs `pnpm db:seed`
+10. runs `pnpm build`
+11. writes API/Web env files under `/etc/eth-treasury-staking-automation`
+12. registers `eth-staking-api` and `eth-staking-web` systemd services
+13. checks `http://127.0.0.1:4000/v1/health` and Web root
+
+`control_plane_schema_mode` defaults to `push` because this repository currently has a Prisma schema and seed, but no migration history. Production should switch to `migrate` after migrations are added.
+
+## Runtime Health Sync
+
+`health-sync.yml` can either preview or submit a CDVN runtime payload from an operator host.
+
+Preview mode is the default:
+
+```bash
+ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/health-sync.yml --limit operator_1
+```
+
+Submit mode posts to the internal API endpoint:
+
+```bash
+ansible-playbook \
+  -i infra/ansible/inventories/prod/hosts.yml \
+  infra/ansible/playbooks/health-sync.yml \
+  --limit operator_1 \
+  --extra-vars '{"execute":true}'
+```
+
+The API endpoint is `POST /v1/internal/cdvn/health-sync` and requires the `x-control-plane-sync-token` header. The Ansible role passes that header through the `HEALTH_SYNC_TOKEN` environment variable so the token is not printed in the command line.
+
 ## Command Examples
 
 From the repository root:
+
+```bash
+ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/control-plane.yml --syntax-check
+```
 
 ```bash
 ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/render-runtime.yml

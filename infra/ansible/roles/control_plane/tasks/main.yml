@@ -1,0 +1,327 @@
+---
+- name: Validate required control plane variables
+  ansible.builtin.assert:
+    that:
+      - control_plane_database_url is defined
+      - control_plane_database_url | length > 0
+      - "'REPLACE_WITH' not in control_plane_database_url"
+      - control_plane_auth_secret is defined
+      - control_plane_auth_secret | length >= 16
+      - "'REPLACE_WITH' not in control_plane_auth_secret"
+      - control_plane_health_sync_token is defined
+      - control_plane_health_sync_token | length >= 16
+      - control_plane_health_sync_token != "change-me"
+      - "'REPLACE_WITH' not in control_plane_health_sync_token"
+      - control_plane_api_base_url is defined
+      - control_plane_api_base_url | length > 0
+      - control_plane_schema_mode in ["push", "migrate"]
+    fail_msg: "Set real control_plane_database_url, control_plane_auth_secret, control_plane_health_sync_token, control_plane_api_base_url, and a valid control_plane_schema_mode."
+
+- name: Install required control plane packages on Debian-family hosts
+  become: true
+  ansible.builtin.package:
+    name:
+      - ca-certificates
+      - curl
+      - git
+      - rsync
+      - tar
+      - postgresql-client
+    state: present
+  when: ansible_os_family | default("") == "Debian"
+
+- name: Create control plane group
+  become: true
+  ansible.builtin.group:
+    name: "{{ control_plane_group }}"
+    system: true
+    state: present
+  when: control_plane_create_user | bool
+
+- name: Create control plane user
+  become: true
+  ansible.builtin.user:
+    name: "{{ control_plane_user }}"
+    group: "{{ control_plane_group }}"
+    home: "{{ control_plane_home_dir }}"
+    shell: /usr/sbin/nologin
+    system: true
+    create_home: true
+    state: present
+  when: control_plane_create_user | bool
+
+- name: Create control plane directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ control_plane_user }}"
+    group: "{{ control_plane_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ control_plane_app_dir }}", mode: "0755" }
+    - { path: "{{ control_plane_env_dir }}", mode: "0750" }
+    - { path: "{{ control_plane_log_dir }}", mode: "0755" }
+
+- name: Check Node.js version
+  ansible.builtin.command:
+    argv:
+      - node
+      - --version
+  register: control_plane_node_version
+  changed_when: false
+
+- name: Require Node.js 20 or newer
+  ansible.builtin.assert:
+    that:
+      - (control_plane_node_version.stdout | regex_replace('^v', '') | split('.') | first | int) >= 20
+    fail_msg: "Node.js 20+ must be installed before deploying the control plane."
+
+- name: Enable Corepack
+  become: true
+  ansible.builtin.command:
+    argv:
+      - corepack
+      - enable
+  changed_when: false
+
+- name: Check pnpm availability
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - --version
+  changed_when: false
+
+- name: Build local release archive
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -czf
+      - "{{ control_plane_release_archive }}"
+      - --exclude=.git
+      - --exclude=.DS_Store
+      - --exclude=node_modules
+      - --exclude=.next
+      - --exclude=dist
+      - --exclude=.turbo
+      - --exclude=tsconfig.tsbuildinfo
+      - -C
+      - "{{ control_plane_source_dir }}"
+      - .
+  delegate_to: localhost
+  run_once: true
+  changed_when: true
+  when: control_plane_sync_source | bool
+
+- name: Unpack release archive on control plane host
+  become: true
+  ansible.builtin.unarchive:
+    src: "{{ control_plane_release_archive }}"
+    dest: "{{ control_plane_app_dir }}"
+    owner: "{{ control_plane_user }}"
+    group: "{{ control_plane_group }}"
+  when: control_plane_sync_source | bool
+
+- name: Install workspace dependencies
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - install
+      - --frozen-lockfile
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  changed_when: true
+
+- name: Generate Prisma client
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - db:generate
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  environment:
+    DATABASE_URL: "{{ control_plane_database_url }}"
+  changed_when: true
+  no_log: true
+
+- name: Apply Prisma schema with db push
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - db:push
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  environment:
+    DATABASE_URL: "{{ control_plane_database_url }}"
+  changed_when: true
+  no_log: true
+  when: control_plane_schema_mode == "push"
+
+- name: Apply Prisma migrations
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - --filter
+      - "@eth-staking/db"
+      - exec
+      - prisma
+      - migrate
+      - deploy
+      - --schema
+      - prisma/schema.prisma
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  environment:
+    DATABASE_URL: "{{ control_plane_database_url }}"
+  changed_when: true
+  no_log: true
+  when: control_plane_schema_mode == "migrate"
+
+- name: Seed database when explicitly requested
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - db:seed
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  environment:
+    DATABASE_URL: "{{ control_plane_database_url }}"
+  changed_when: true
+  no_log: true
+  when: control_plane_seed_database | bool
+
+- name: Build control plane packages
+  become: true
+  become_user: "{{ control_plane_user }}"
+  ansible.builtin.command:
+    argv:
+      - pnpm
+      - build
+  args:
+    chdir: "{{ control_plane_app_dir }}"
+  environment:
+    API_BASE_URL: "{{ control_plane_api_base_url }}"
+    DATABASE_URL: "{{ control_plane_database_url }}"
+  changed_when: true
+  no_log: true
+
+- name: Write API environment file
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ control_plane_env_dir }}/api.env"
+    owner: root
+    group: "{{ control_plane_group }}"
+    mode: "0640"
+    content: |
+      NODE_ENV=production
+      DATABASE_URL={{ control_plane_database_url }}
+      API_PORT={{ control_plane_api_port }}
+      APP_BASE_URL={{ control_plane_app_base_url }}
+      AUTH_SECRET={{ control_plane_auth_secret }}
+      REDIS_URL={{ control_plane_redis_url }}
+      CDVN_HEALTH_SYNC_TOKEN={{ control_plane_health_sync_token }}
+  no_log: true
+  notify:
+    - Restart control plane api
+
+- name: Write Web environment file
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ control_plane_env_dir }}/web.env"
+    owner: root
+    group: "{{ control_plane_group }}"
+    mode: "0640"
+    content: |
+      NODE_ENV=production
+      API_BASE_URL={{ control_plane_api_base_url }}
+  notify:
+    - Restart control plane web
+
+- name: Write API systemd unit
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/eth-staking-api.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=ETH Treasury Staking API
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User={{ control_plane_user }}
+      Group={{ control_plane_group }}
+      WorkingDirectory={{ control_plane_app_dir }}
+      EnvironmentFile={{ control_plane_env_dir }}/api.env
+      Environment=PATH={{ control_plane_systemd_path }}
+      ExecStart=/usr/bin/env pnpm --filter @eth-staking/api exec node dist/main.js
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+  notify:
+    - Reload systemd
+    - Restart control plane api
+
+- name: Write Web systemd unit
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/eth-staking-web.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=ETH Treasury Staking Web
+      After=network-online.target eth-staking-api.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User={{ control_plane_user }}
+      Group={{ control_plane_group }}
+      WorkingDirectory={{ control_plane_app_dir }}
+      EnvironmentFile={{ control_plane_env_dir }}/web.env
+      Environment=PATH={{ control_plane_systemd_path }}
+      ExecStart=/usr/bin/env pnpm --filter @eth-staking/web exec next start --port {{ control_plane_web_port }}
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+  notify:
+    - Reload systemd
+    - Restart control plane web
+
+- name: Flush service handlers before health checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for API health endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ control_plane_api_port }}/v1/health"
+    method: GET
+    status_code: 200
+  register: control_plane_api_health
+  retries: 12
+  delay: 5
+  until: control_plane_api_health.status == 200
+
+- name: Wait for Web root
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ control_plane_web_port }}/"
+    method: GET
+    status_code: 200
+  register: control_plane_web_health
+  retries: 12
+  delay: 5
+  until: control_plane_web_health.status == 200

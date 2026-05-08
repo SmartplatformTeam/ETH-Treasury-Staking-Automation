@@ -11,10 +11,21 @@ cdvn_host_file: "{{ secure_config_dir }}/host.yml"
 
 rollout_approval_file: "{{ approval_dir }}/rollout-approval.env"
 artifact_approval_file: "{{ approval_dir }}/charon-artifact-approval.env"
-health_sync_endpoint_url: http://127.0.0.1:4000/v1/health/sync
+health_sync_endpoint_url: http://127.0.0.1:4000/v1/internal/cdvn/health-sync
+health_sync_token: REPLACE_WITH_HEALTH_SYNC_TOKEN
 
 execute: false
 dry_run: true
 verify_deployed: false
 min_disk_gb: 20
 artifact_stage_force: false
+
+control_plane_database_url: postgresql://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/eth_staking_automation?schema=public
+control_plane_auth_secret: REPLACE_WITH_LONG_RANDOM_AUTH_SECRET
+control_plane_health_sync_token: REPLACE_WITH_HEALTH_SYNC_TOKEN
+control_plane_schema_mode: push
+control_plane_seed_database: false
+control_plane_api_port: 4000
+control_plane_web_port: 3000
+control_plane_api_base_url: http://REPLACE_WITH_CONTROL_PLANE_HOST:4000
+control_plane_app_base_url: http://REPLACE_WITH_CONTROL_PLANE_HOST:3000

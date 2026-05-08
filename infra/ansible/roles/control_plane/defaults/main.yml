@@ -1,0 +1,23 @@
+---
+control_plane_source_dir: "{{ playbook_dir }}/../../.."
+control_plane_release_archive: /tmp/eth-staking-control-plane-release.tgz
+control_plane_sync_source: true
+
+control_plane_create_user: true
+control_plane_user: ethstaking
+control_plane_group: ethstaking
+control_plane_home_dir: /var/lib/ethstaking
+control_plane_app_dir: /opt/eth-treasury-staking-automation
+control_plane_env_dir: /etc/eth-treasury-staking-automation
+control_plane_log_dir: /var/log/eth-treasury-staking-automation
+
+control_plane_schema_mode: push
+control_plane_seed_database: false
+
+control_plane_api_port: 4000
+control_plane_web_port: 3000
+control_plane_api_base_url: "http://127.0.0.1:{{ control_plane_api_port }}"
+control_plane_app_base_url: "http://127.0.0.1:{{ control_plane_web_port }}"
+control_plane_redis_url: redis://127.0.0.1:6379
+control_plane_health_sync_token: change-me
+control_plane_systemd_path: /usr/local/bin:/usr/bin:/bin

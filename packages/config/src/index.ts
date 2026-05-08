@@ -17,11 +17,9 @@ const runtimeEnvSchema = z.object({
   OBOL_NETWORK: z.string().min(1).default("mainnet"),
   CDVN_BASELINE_VERSION: z.string().min(1).default("v1.6.0"),
   CDVN_OVERLAY_PROFILE: z.string().min(1).default("web3signer"),
+  CDVN_HEALTH_SYNC_TOKEN: z.string().min(1).default("change-me"),
   SAFE_ADDRESS: z.string().min(1).default("0x0000000000000000000000000000000000000000"),
-  SAFE_TX_SERVICE_URL: z
-    .string()
-    .url()
-    .default("https://safe-transaction-mainnet.safe.global"),
+  SAFE_TX_SERVICE_URL: z.string().url().default("https://safe-transaction-mainnet.safe.global"),
   S3_ENDPOINT: z.string().url().default("http://localhost:9001"),
   S3_BUCKET: z.string().min(1).default("eth-staking-artifacts"),
   S3_ACCESS_KEY: z.string().min(1).default("minio"),
@@ -30,7 +28,7 @@ const runtimeEnvSchema = z.object({
     .string()
     .url()
     .default("https://hooks.slack.com/services/example/example/example"),
-  ENCRYPTION_KEY: z.string().min(1).default("change-me")
+  ENCRYPTION_KEY: z.string().min(1).default("change-me"),
 });
 
 export type RuntimeEnv = z.infer<typeof runtimeEnvSchema>;

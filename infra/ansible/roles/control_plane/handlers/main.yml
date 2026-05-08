@@ -1,0 +1,19 @@
+---
+- name: Reload systemd
+  become: true
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart control plane api
+  become: true
+  ansible.builtin.systemd:
+    name: eth-staking-api
+    state: restarted
+    enabled: true
+
+- name: Restart control plane web
+  become: true
+  ansible.builtin.systemd:
+    name: eth-staking-web
+    state: restarted
+    enabled: true

@@ -21,6 +21,7 @@ RENDER_DIR=""
 HOST_NAME=""
 ENDPOINT_URL=""
 DRY_RUN=0
+SYNC_TOKEN="${HEALTH_SYNC_TOKEN:-}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -86,4 +87,10 @@ if [ "${DRY_RUN}" -eq 1 ]; then
   exit 0
 fi
 
-curl -sS -X POST -H 'content-type: application/json' --data "${PAYLOAD}" "${ENDPOINT_URL}"
+CURL_HEADERS=(-H 'content-type: application/json')
+
+if [ -n "${SYNC_TOKEN}" ]; then
+  CURL_HEADERS+=(-H "x-control-plane-sync-token: ${SYNC_TOKEN}")
+fi
+
+curl -sS -X POST "${CURL_HEADERS[@]}" --data "${PAYLOAD}" "${ENDPOINT_URL}"
