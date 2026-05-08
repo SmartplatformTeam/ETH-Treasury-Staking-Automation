@@ -20,6 +20,8 @@
   - 제품 범위, 아키텍처, 현재 구현 상태, CDVN runtime automation, inventory, secret, Web3Signer/KMS, approval/audit, observability, bring-up runbook, 공개 저장소 안전 체크를 통합한 단일 운영 문서
 - `docs/local-runtime-test.md`
   - 실제 DKG artifact 없이 로컬에서 operator-local render/stage/verify와 rollout exclude 경계를 검증하는 smoke test runbook
+- `docs/ansible-control-plane-mvp.md`
+  - Control Plane button -> Backend API -> Ansible -> 기존 CDVN runtime scripts MVP의 범위, 승인 조건, 보안 경계, smoke test 절차
 - `docs/sole-ownership-and-key-control-draft.md`
   - Safe 기반 단독 소유권 입증, 3-of-4 signer governance, Obol DKG 세레머니, key share 노출 통제, 단일 위치 재조합 부존재 입증을 위한 제출용 문서 초안
 - `AGENTS.md`
@@ -53,6 +55,8 @@
   - structured logger
 - `infra/obol-cdvn`
   - `v1.9.5` pinned baseline mirror, `web3signer` / `observability` overlay, inventory 예시, `render/stage/verify/rollout/preflight/execute/drift-check/health-sync` 스크립트
+- `infra/ansible`
+  - 기존 CDVN runtime scripts를 operator host에서 실행하는 public-safe Ansible playbook과 example inventory
 
 자세한 현재 상태와 runtime 세부 handoff는 `docs/README.md`를 기준으로 본다.
 
@@ -74,6 +78,7 @@ pnpm dev
 - API inventory: `http://localhost:4000/v1/inventory/validators` (nodes/clusters/signers 동일 prefix)
 - API workflows: `http://localhost:4000/v1/approvals`, `http://localhost:4000/v1/deposits`, `http://localhost:4000/v1/audit-logs`
 - API insights: `http://localhost:4000/v1/alerts`, `http://localhost:4000/v1/rewards`
+- API automation: `http://localhost:4000/v1/automation/runs`
 
 Web이 다른 주소의 API를 사용해야 하면 `API_BASE_URL`을 설정한다. 기본값은 `http://localhost:4000`이다.
 

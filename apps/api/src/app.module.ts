@@ -4,6 +4,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./modules/auth/auth.controller";
 import { AuthStubGuard } from "./modules/auth/auth.guard";
 import { RbacGuard } from "./modules/auth/rbac.guard";
+import { AutomationModule } from "./modules/automation/automation.module";
 import { HealthController } from "./modules/health/health.controller";
 import { InventoryController } from "./modules/inventory/inventory.controller";
 import { InventoryService } from "./modules/inventory/inventory.service";
@@ -16,6 +17,7 @@ import { DepositsController } from "./modules/workflows/deposits.controller";
 import { WorkflowsService } from "./modules/workflows/workflows.service";
 
 @Module({
+  imports: [AutomationModule],
   controllers: [
     HealthController,
     AuthController,

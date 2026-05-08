@@ -1,0 +1,8 @@
+---
+- name: Run CDVN host preflight checks on operator host
+  hosts: operator_hosts
+  gather_facts: false
+  vars:
+    cdvn_runtime_action: preflight
+  roles:
+    - cdvn_runtime

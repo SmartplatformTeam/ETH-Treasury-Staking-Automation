@@ -1,0 +1,8 @@
+---
+- name: Render CDVN runtime on operator host
+  hosts: operator_hosts
+  gather_facts: false
+  vars:
+    cdvn_runtime_action: render
+  roles:
+    - cdvn_runtime

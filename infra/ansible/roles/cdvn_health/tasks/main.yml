@@ -1,0 +1,13 @@
+---
+- name: Preview health sync payload
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/health-sync.sh"
+      - --render-dir
+      - "{{ deployment_path }}"
+      - --host-name
+      - "{{ host_name | default(inventory_hostname) }}"
+      - --endpoint-url
+      - "{{ health_sync_endpoint_url }}"
+      - --dry-run
+  changed_when: false

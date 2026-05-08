@@ -6,6 +6,7 @@
 `publish-safety-checklist`, `repo-bootstrap`, `harness-bootstrap` 내용을 여기로 통합했다.
 
 로컬에서 runtime automation smoke test를 실행하는 절차는 `docs/local-runtime-test.md`를 본다.
+Control Plane에서 Ansible을 통해 기존 CDVN runtime scripts를 호출하는 MVP는 `docs/ansible-control-plane-mvp.md`를 본다.
 Safe 기반 단독 소유권 입증과 DKG key control 제출용 초안은 `docs/sole-ownership-and-key-control-draft.md`를 본다.
 
 ## 1. 한 줄 정의
@@ -183,6 +184,7 @@ packages/ui
 packages/config
 packages/observability
 infra/obol-cdvn
+infra/ansible
 docs
 ```
 
@@ -197,6 +199,7 @@ docs
 - `packages/config`: zod 기반 env loader.
 - `packages/observability`: structured JSON logger.
 - `infra/obol-cdvn`: CDVN `v1.9.5` pinned baseline mirror, `web3signer` / `observability` overlay, inventory 예시, runtime scripts.
+- `infra/ansible`: Control Plane API가 호출할 Ansible playbook, public-safe example inventory, 기존 CDVN script orchestration role.
 
 현재 API 진입점:
 
@@ -205,6 +208,7 @@ docs
 - `/v1/auth/rbac-matrix`
 - `/v1/inventory/validators`
 - `/v1/inventory/nodes`
+- `/v1/inventory/hosts`
 - `/v1/inventory/clusters`
 - `/v1/inventory/signers`
 - `/v1/approvals`
@@ -212,6 +216,7 @@ docs
 - `/v1/audit-logs`
 - `/v1/alerts`
 - `/v1/rewards`
+- `/v1/automation/runs`
 - `/docs`
 
 현실적인 현재 상태:

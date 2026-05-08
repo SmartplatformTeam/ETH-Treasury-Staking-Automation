@@ -1,0 +1,8 @@
+---
+- name: Verify CDVN runtime on operator host
+  hosts: operator_hosts
+  gather_facts: false
+  vars:
+    cdvn_runtime_action: verify
+  roles:
+    - cdvn_runtime

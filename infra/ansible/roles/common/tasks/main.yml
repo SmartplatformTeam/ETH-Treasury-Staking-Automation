@@ -1,0 +1,62 @@
+---
+- name: Install required host packages on Debian-family hosts
+  become: true
+  ansible.builtin.package:
+    name:
+      - ca-certificates
+      - curl
+      - docker.io
+      - docker-compose-plugin
+      - jq
+      - rsync
+      - chrony
+    state: present
+  when: ansible_os_family | default("") == "Debian"
+
+- name: Check Docker CLI
+  ansible.builtin.command:
+    argv:
+      - docker
+      - --version
+  changed_when: false
+
+- name: Check Docker Compose plugin
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - version
+  changed_when: false
+
+- name: Check rsync
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --version
+  changed_when: false
+
+- name: Check curl
+  ansible.builtin.command:
+    argv:
+      - curl
+      - --version
+  changed_when: false
+
+- name: Check jq
+  ansible.builtin.command:
+    argv:
+      - jq
+      - --version
+  changed_when: false
+
+- name: Create expected non-secret directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop:
+    - "{{ deployment_path }}"
+    - "{{ secure_config_dir }}"
+    - "{{ artifact_source_dir | dirname }}"
+    - "{{ approval_dir | dirname }}"

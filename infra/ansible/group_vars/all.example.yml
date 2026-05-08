@@ -1,0 +1,20 @@
+cluster_name: treasury-mainnet-obol-a
+deployment_path: /opt/obol/{{ cluster_name }}
+secure_config_dir: /secure/config
+artifact_source_dir: /var/lib/eth-treasury-operator-artifacts/{{ cluster_name }}
+approval_dir: /secure/approvals/active
+
+cdvn_remote_dir: /tmp/eth-treasury-cdvn
+cdvn_render_dir: /tmp/cdvn-operator-runtime
+cdvn_cluster_file: "{{ secure_config_dir }}/cluster.yml"
+cdvn_host_file: "{{ secure_config_dir }}/host.yml"
+
+rollout_approval_file: "{{ approval_dir }}/rollout-approval.env"
+artifact_approval_file: "{{ approval_dir }}/charon-artifact-approval.env"
+health_sync_endpoint_url: http://127.0.0.1:4000/v1/health/sync
+
+execute: false
+dry_run: true
+verify_deployed: false
+min_disk_gb: 20
+artifact_stage_force: false

@@ -1,0 +1,73 @@
+---
+- name: Run full operator MVP flow on one operator host
+  hosts: operator_hosts
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Render runtime
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: render
+
+    - name: Verify rendered runtime
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: verify
+        verify_deployed: false
+
+    - name: Preview rollout
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: rollout
+        execute: false
+
+    - name: Execute rollout
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: rollout
+        execute: true
+
+    - name: Run host preflight
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: preflight
+
+    - name: Preview host-local artifact stage
+      ansible.builtin.include_role:
+        name: cdvn_artifacts
+      vars:
+        execute: false
+
+    - name: Execute host-local artifact stage
+      ansible.builtin.include_role:
+        name: cdvn_artifacts
+      vars:
+        execute: true
+
+    - name: Verify deployed runtime
+      ansible.builtin.include_role:
+        name: cdvn_runtime
+      vars:
+        cdvn_runtime_action: verify
+        verify_deployed: true
+
+    - name: Preview compose rollout
+      ansible.builtin.include_role:
+        name: cdvn_compose
+      vars:
+        execute: false
+
+    - name: Execute compose rollout
+      ansible.builtin.include_role:
+        name: cdvn_compose
+      vars:
+        execute: true
+
+    - name: Preview health sync payload
+      ansible.builtin.include_role:
+        name: cdvn_health

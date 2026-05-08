@@ -1,0 +1,9 @@
+---
+- name: Preview CDVN health sync payload on operator host
+  hosts: operator_hosts
+  gather_facts: false
+  roles:
+    - role: cdvn_runtime
+      vars:
+        cdvn_runtime_action: sync_only
+    - cdvn_health

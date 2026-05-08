@@ -1,0 +1,85 @@
+---
+- name: Copy public CDVN runtime tree to operator host
+  ansible.builtin.copy:
+    src: "{{ cdvn_source_dir | default(playbook_dir ~ '/../../obol-cdvn') }}/"
+    dest: "{{ cdvn_remote_dir }}/"
+    mode: preserve
+
+- name: Render operator runtime
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/render.sh"
+      - --cluster-file
+      - "{{ cdvn_cluster_file | default(secure_config_dir ~ '/cluster.yml') }}"
+      - --host-file
+      - "{{ cdvn_host_file | default(secure_config_dir ~ '/host.yml') }}"
+      - --output-dir
+      - "{{ cdvn_render_dir }}"
+      - --force
+  changed_when: true
+  when: cdvn_runtime_action | default("sync_only") == "render"
+
+- name: Verify rendered or deployed runtime
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/verify.sh"
+      - --render-dir
+      - "{{ (verify_deployed | default(false) | bool) | ternary(deployment_path, cdvn_render_dir) }}"
+      - --host-name
+      - "{{ host_name | default(inventory_hostname) }}"
+  changed_when: false
+  when: cdvn_runtime_action | default("sync_only") == "verify"
+
+- name: Require rollout approval file path
+  ansible.builtin.assert:
+    that:
+      - rollout_approval_file is defined
+      - rollout_approval_file | length > 0
+    fail_msg: "rollout_approval_file must point to an approved host-local file."
+  when: cdvn_runtime_action | default("sync_only") == "rollout"
+
+- name: Roll out rendered runtime in dry-run mode
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/rollout.sh"
+      - --render-dir
+      - "{{ cdvn_render_dir }}"
+      - --approval-file
+      - "{{ rollout_approval_file }}"
+      - --destination
+      - "{{ deployment_path }}"
+  changed_when: false
+  when:
+    - cdvn_runtime_action | default("sync_only") == "rollout"
+    - not (execute | default(false) | bool)
+
+- name: Roll out rendered runtime in execute mode
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/rollout.sh"
+      - --render-dir
+      - "{{ cdvn_render_dir }}"
+      - --approval-file
+      - "{{ rollout_approval_file }}"
+      - --destination
+      - "{{ deployment_path }}"
+      - --execute
+  changed_when: true
+  when:
+    - cdvn_runtime_action | default("sync_only") == "rollout"
+    - execute | default(false) | bool
+
+- name: Run host preflight checks locally on operator host
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/host-preflight.sh"
+      - --render-dir
+      - "{{ cdvn_render_dir }}"
+      - --deployment-path
+      - "{{ deployment_path }}"
+      - --min-disk-gb
+      - "{{ min_disk_gb | default(20) | string }}"
+      - --local
+      - --execute
+  changed_when: false
+  when: cdvn_runtime_action | default("sync_only") == "preflight"

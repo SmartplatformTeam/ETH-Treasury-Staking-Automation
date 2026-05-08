@@ -1,0 +1,36 @@
+---
+- name: Require compose rollout approval file path
+  ansible.builtin.assert:
+    that:
+      - rollout_approval_file is defined
+      - rollout_approval_file | length > 0
+    fail_msg: "rollout_approval_file must point to an approved host-local file."
+
+- name: Preview compose execution
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/rollout-exec.sh"
+      - --render-dir
+      - "{{ deployment_path }}"
+      - --approval-file
+      - "{{ rollout_approval_file }}"
+      - --deployment-path
+      - "{{ deployment_path }}"
+      - --local
+  changed_when: false
+  when: not (execute | default(false) | bool)
+
+- name: Execute compose rollout
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/rollout-exec.sh"
+      - --render-dir
+      - "{{ deployment_path }}"
+      - --approval-file
+      - "{{ rollout_approval_file }}"
+      - --deployment-path
+      - "{{ deployment_path }}"
+      - --local
+      - --execute
+  changed_when: true
+  when: execute | default(false) | bool

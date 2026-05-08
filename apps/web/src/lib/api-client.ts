@@ -40,3 +40,22 @@ export async function fetchApiJson<T>(path: string): Promise<T> {
 
   return (await response.json()) as T;
 }
+
+export async function postApiJson<T>(path: string, body: unknown): Promise<T> {
+  const sanitizedPath = path.startsWith("/") ? path : `/${path}`;
+  const headers = await getForwardedHeaders();
+  headers.set("content-type", "application/json");
+
+  const response = await fetch(`${resolveApiRoot()}${sanitizedPath}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed for '${sanitizedPath}' with status ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}

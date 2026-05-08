@@ -97,6 +97,12 @@ export const opsNavigation: NavItem[] = [
     requiredPermission: "inventory:read"
   },
   {
+    href: "/automation",
+    label: "Automation",
+    description: "Ansible runs and redacted logs",
+    requiredPermission: "inventory:read"
+  },
+  {
     href: "/signers",
     label: "Signers",
     description: "remote signer endpoints and KMS bindings",

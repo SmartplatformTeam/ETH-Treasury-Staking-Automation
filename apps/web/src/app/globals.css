@@ -1,12 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
-  font-family:
-    "IBM Plex Sans",
-    "SUIT Variable",
-    system-ui,
-    sans-serif;
+  color-scheme: light;
+  --miro-primary: #050038;
+  --miro-on-primary: #ffffff;
+  --miro-canvas: #ffffff;
+  --miro-surface: #f7f7f2;
+  --miro-surface-soft: #fbfbf7;
+  --miro-hairline: #e7e4d8;
+  --miro-hairline-strong: #cbc7b8;
+  --miro-yellow: #ffd02f;
+  --miro-on-yellow: #050038;
+  --miro-yellow-soft: #fff4b8;
+  --miro-blue: #4262ff;
+  --miro-on-blue: #ffffff;
+  --miro-coral-soft: #ffd7c2;
+  --miro-rose-soft: #ffe1ec;
+  --miro-teal-soft: #c9f4ef;
+  --miro-mint-soft: #dcf7d5;
+  --miro-ink: #050038;
+  --miro-charcoal: #2d294f;
+  --miro-slate: #6b6684;
+  --miro-muted: #9a9587;
+  font-family: "Roobert PRO", "Noto Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 * {
@@ -20,8 +36,8 @@ body {
 }
 
 body {
-  background: #020617;
-  color: #e2e8f0;
+  background: var(--miro-canvas);
+  color: var(--miro-ink);
 }
 
 a {

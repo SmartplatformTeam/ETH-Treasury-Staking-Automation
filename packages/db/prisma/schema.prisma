@@ -85,6 +85,7 @@ enum ApprovalPolicyType {
   SAFE_PROPOSAL
   SIGNER_BINDING
   ROLLOUT
+  CHARON_ARTIFACT_STAGE
 }
 
 enum DepositValidationStatus {
@@ -117,6 +118,37 @@ enum DkgCeremonyStatus {
   CANCELLED
 }
 
+enum AutomationOperation {
+  BOOTSTRAP_HOST
+  RENDER_RUNTIME
+  VERIFY_RUNTIME
+  ROLLOUT_DRY_RUN
+  ROLLOUT_EXECUTE
+  PREFLIGHT_HOST
+  STAGE_ARTIFACTS_DRY_RUN
+  STAGE_ARTIFACTS_EXECUTE
+  DEPLOYED_VERIFY
+  COMPOSE_DRY_RUN
+  COMPOSE_EXECUTE
+  FULL_OPERATOR_MVP
+  HEALTH_SYNC_DRY_RUN
+}
+
+enum AutomationRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCEL_REQUESTED
+  CANCELLED
+}
+
+enum AutomationRunStream {
+  STDOUT
+  STDERR
+  SYSTEM
+}
+
 model User {
   id                String      @id @default(cuid())
   email             String      @unique
@@ -129,6 +161,7 @@ model User {
   auditLogs         AuditLog[]
   safeProposals     SafeProposal[] @relation("safe_exported_by")
   dkgCeremonies     DkgCeremony[]  @relation("dkg_initiated_by")
+  automationRuns    AutomationRun[]
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 }
@@ -146,6 +179,8 @@ model OperatorHost {
   cluster         Cluster?     @relation(fields: [clusterId], references: [id])
   nodes           Node[]
   signers         Signer[]
+  automationRuns  AutomationRun[]
+  automationApprovals Approval[] @relation("approval_host")
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 }
@@ -169,6 +204,8 @@ model Cluster {
   validators      Validator[]
   depositRequests DepositRequest[]
   dkgCeremonies   DkgCeremony[]
+  automationRuns  AutomationRun[]
+  automationApprovals Approval[] @relation("approval_cluster")
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -284,12 +321,55 @@ model Approval {
   approvedById  String?
   rejectedById  String?
   depositRequestId String?
+  clusterId     String?
+  hostId        String?
+  automationOperation AutomationOperation?
   requestedBy   User               @relation("approval_requested_by", fields: [requestedById], references: [id])
   approvedBy    User?              @relation("approval_approved_by", fields: [approvedById], references: [id])
   rejectedBy    User?              @relation("approval_rejected_by", fields: [rejectedById], references: [id])
   depositRequest DepositRequest?   @relation(fields: [depositRequestId], references: [id])
+  cluster       Cluster?           @relation("approval_cluster", fields: [clusterId], references: [id])
+  host          OperatorHost?      @relation("approval_host", fields: [hostId], references: [id])
+  automationRuns AutomationRun[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+}
+
+model AutomationRun {
+  id             String              @id @default(cuid())
+  operation      AutomationOperation
+  status         AutomationRunStatus @default(QUEUED)
+  clusterId      String?
+  hostId         String?
+  approvalId     String?
+  requestedById  String?
+  playbook       String
+  inventoryRef   String
+  dryRun         Boolean             @default(true)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  exitCode       Int?
+  failureReason  String?
+  cluster        Cluster?            @relation(fields: [clusterId], references: [id])
+  host           OperatorHost?       @relation(fields: [hostId], references: [id])
+  approval       Approval?           @relation(fields: [approvalId], references: [id])
+  requestedBy    User?               @relation(fields: [requestedById], references: [id])
+  events         AutomationRunEvent[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model AutomationRunEvent {
+  id        String              @id @default(cuid())
+  runId     String
+  sequence  Int
+  stream    AutomationRunStream
+  message   String
+  redacted  Boolean             @default(false)
+  run       AutomationRun       @relation(fields: [runId], references: [id])
+  createdAt DateTime            @default(now())
+
+  @@unique([runId, sequence])
 }
 
 model SafeProposal {

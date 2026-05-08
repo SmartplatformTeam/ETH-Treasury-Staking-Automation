@@ -116,6 +116,42 @@ export class InventoryService {
     };
   }
 
+  async listHosts() {
+    const hosts = await prisma.operatorHost.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        region: true,
+        profile: true,
+        baselineVersion: true,
+        overlayVersion: true,
+        healthStatus: true,
+        cluster: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    return {
+      total: hosts.length,
+      items: hosts.map((host) => ({
+        id: host.id,
+        name: host.name,
+        region: host.region,
+        profile: host.profile,
+        baselineVersion: host.baselineVersion,
+        overlayVersion: host.overlayVersion,
+        healthStatus: host.healthStatus,
+        clusterId: host.cluster?.id ?? null,
+        clusterName: host.cluster?.name ?? null
+      }))
+    };
+  }
+
   async listClusters() {
     const clusters = await prisma.cluster.findMany({
       orderBy: { name: "asc" },

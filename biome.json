@@ -12,6 +12,11 @@
       "recommended": true
     }
   },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
   "files": {
     "ignore": [
       "node_modules",

@@ -1,0 +1,6 @@
+---
+- name: Bootstrap already-prepared bare-metal operator host
+  hosts: operator_hosts
+  gather_facts: true
+  roles:
+    - common

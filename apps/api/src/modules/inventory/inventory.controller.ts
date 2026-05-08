@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Controller, Get, Inject, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { RequirePermissions } from "../auth/auth.decorators";
@@ -8,7 +8,7 @@ import { InventoryService } from "./inventory.service";
 @Controller("inventory")
 @RequirePermissions("inventory:read")
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(@Inject(InventoryService) private readonly inventoryService: InventoryService) {}
 
   @Get("validators")
   @ApiOperation({
@@ -32,6 +32,14 @@ export class InventoryController {
   })
   listNodes() {
     return this.inventoryService.listNodes();
+  }
+
+  @Get("hosts")
+  @ApiOperation({
+    summary: "List operator hosts available for automation targeting."
+  })
+  listHosts() {
+    return this.inventoryService.listHosts();
   }
 
   @Get("clusters")

@@ -1,0 +1,38 @@
+---
+- name: Require artifact approval file path
+  ansible.builtin.assert:
+    that:
+      - artifact_approval_file is defined
+      - artifact_approval_file | length > 0
+    fail_msg: "artifact_approval_file must point to an approved host-local file."
+
+- name: Preview host-local Charon artifact staging
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/stage-charon-artifacts.sh"
+      - --runtime-dir
+      - "{{ deployment_path }}"
+      - --approval-file
+      - "{{ artifact_approval_file }}"
+      - --source-dir
+      - "{{ artifact_source_dir }}"
+      - --host-name
+      - "{{ host_name | default(inventory_hostname) }}"
+  changed_when: false
+  when: not (execute | default(false) | bool)
+
+- name: Execute host-local Charon artifact staging
+  ansible.builtin.command:
+    argv:
+      - "{{ cdvn_remote_dir }}/scripts/stage-charon-artifacts.sh"
+      - --runtime-dir
+      - "{{ deployment_path }}"
+      - --approval-file
+      - "{{ artifact_approval_file }}"
+      - --source-dir
+      - "{{ artifact_source_dir }}"
+      - --host-name
+      - "{{ host_name | default(inventory_hostname) }}"
+      - --execute
+  changed_when: true
+  when: execute | default(false) | bool
