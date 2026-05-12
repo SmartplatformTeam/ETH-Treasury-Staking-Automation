@@ -1,10 +1,19 @@
 ---
+- name: Resolve effective PostgreSQL port
+  ansible.builtin.set_fact:
+    control_plane_effective_postgres_port: "{{ control_plane_postgres_port }}"
+
+- name: Resolve effective database URL
+  ansible.builtin.set_fact:
+    control_plane_effective_database_url: "{{ control_plane_database_url | default('postgresql://' ~ (control_plane_postgres_user | urlencode) ~ ':' ~ (control_plane_postgres_password | urlencode) ~ '@' ~ control_plane_postgres_host ~ ':' ~ (control_plane_effective_postgres_port | string) ~ '/' ~ control_plane_postgres_database ~ '?schema=public') }}"
+  no_log: true
+
 - name: Validate required control plane variables
   ansible.builtin.assert:
     that:
-      - control_plane_database_url is defined
-      - control_plane_database_url | length > 0
-      - "'REPLACE_WITH' not in control_plane_database_url"
+      - control_plane_effective_database_url is defined
+      - control_plane_effective_database_url | length > 0
+      - "'REPLACE_WITH' not in control_plane_effective_database_url"
       - control_plane_auth_secret is defined
       - control_plane_auth_secret | length >= 16
       - "'REPLACE_WITH' not in control_plane_auth_secret"
@@ -12,10 +21,15 @@
       - control_plane_health_sync_token | length >= 16
       - control_plane_health_sync_token != "change-me"
       - "'REPLACE_WITH' not in control_plane_health_sync_token"
+      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_password != "change-me"
+      - (not (control_plane_manage_local_postgres | bool)) or 'REPLACE_WITH' not in control_plane_postgres_password
+      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_user is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_database is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_password is not search("'")
       - control_plane_api_base_url is defined
       - control_plane_api_base_url | length > 0
       - control_plane_schema_mode in ["push", "migrate"]
-    fail_msg: "Set real control_plane_database_url, control_plane_auth_secret, control_plane_health_sync_token, control_plane_api_base_url, and a valid control_plane_schema_mode."
+    fail_msg: "Set real database credentials, control_plane_auth_secret, control_plane_health_sync_token, control_plane_api_base_url, and a valid control_plane_schema_mode."
 
 - name: Install required control plane packages on Debian-family hosts
   become: true
@@ -23,12 +37,231 @@
     name:
       - ca-certificates
       - curl
+      - gpg
       - git
       - rsync
       - tar
       - postgresql-client
     state: present
-  when: ansible_os_family | default("") == "Debian"
+  when: ansible_facts.os_family | default("") == "Debian"
+
+- name: Install local PostgreSQL on Debian-family hosts
+  become: true
+  ansible.builtin.package:
+    name:
+      - postgresql
+      - postgresql-contrib
+    state: present
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_manage_local_postgres | bool
+
+- name: Start local PostgreSQL service
+  become: true
+  ansible.builtin.systemd:
+    name: postgresql
+    state: started
+    enabled: true
+  when: control_plane_manage_local_postgres | bool
+
+- name: Discover managed local PostgreSQL port
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -tAc
+      - "SELECT current_setting('port')"
+  register: control_plane_local_postgres_port_discovery
+  changed_when: false
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_database_url is not defined
+
+- name: Resolve effective local PostgreSQL connection
+  ansible.builtin.set_fact:
+    control_plane_effective_postgres_port: "{{ control_plane_local_postgres_port_discovery.stdout | trim }}"
+    control_plane_effective_database_url: "{{ 'postgresql://' ~ (control_plane_postgres_user | urlencode) ~ ':' ~ (control_plane_postgres_password | urlencode) ~ '@' ~ control_plane_postgres_host ~ ':' ~ (control_plane_local_postgres_port_discovery.stdout | trim) ~ '/' ~ control_plane_postgres_database ~ '?schema=public' }}"
+  no_log: true
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_database_url is not defined
+
+- name: Check local PostgreSQL app role
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -tAc
+      - "SELECT 1 FROM pg_roles WHERE rolname='{{ control_plane_postgres_user }}'"
+  register: control_plane_postgres_role_check
+  changed_when: false
+  when: control_plane_manage_local_postgres | bool
+
+- name: Create local PostgreSQL app role
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - createuser
+      - --login
+      - "{{ control_plane_postgres_user }}"
+  changed_when: true
+  no_log: true
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_postgres_role_check.stdout | trim != "1"
+
+- name: Update local PostgreSQL app role password
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -v
+      - "app_password={{ control_plane_postgres_password }}"
+  args:
+    stdin: "ALTER ROLE \"{{ control_plane_postgres_user }}\" WITH LOGIN PASSWORD :'app_password';"
+  register: control_plane_postgres_password_update
+  changed_when: false
+  failed_when: false
+  when: control_plane_manage_local_postgres | bool
+
+- name: Show sanitized PostgreSQL password update failure
+  ansible.builtin.debug:
+    msg:
+      - "PostgreSQL role password update failed. Sanitized stdout/stderr follows."
+      - "{{ control_plane_postgres_password_update.stdout | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
+      - "{{ control_plane_postgres_password_update.stderr | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_postgres_password_update.rc | default(0) != 0
+
+- name: Fail after PostgreSQL password update failure
+  ansible.builtin.fail:
+    msg: "PostgreSQL role password update failed. See sanitized stdout/stderr above."
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_postgres_password_update.rc | default(0) != 0
+
+- name: Check local PostgreSQL app database
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -tAc
+      - "SELECT 1 FROM pg_database WHERE datname='{{ control_plane_postgres_database }}'"
+  register: control_plane_postgres_database_check
+  changed_when: false
+  when: control_plane_manage_local_postgres | bool
+
+- name: Create local PostgreSQL app database
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - createdb
+      - --owner
+      - "{{ control_plane_postgres_user }}"
+      - "{{ control_plane_postgres_database }}"
+  changed_when: true
+  no_log: true
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_postgres_database_check.stdout | trim != "1"
+
+- name: Ensure local PostgreSQL app database ownership
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - "ALTER DATABASE \"{{ control_plane_postgres_database }}\" OWNER TO \"{{ control_plane_postgres_user }}\";"
+  changed_when: false
+  no_log: true
+  when: control_plane_manage_local_postgres | bool
+
+- name: Ensure local PostgreSQL public schema ownership
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -d
+      - "{{ control_plane_postgres_database }}"
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - "CREATE SCHEMA IF NOT EXISTS public; ALTER SCHEMA public OWNER TO \"{{ control_plane_postgres_user }}\"; GRANT ALL ON SCHEMA public TO \"{{ control_plane_postgres_user }}\";"
+  changed_when: false
+  no_log: true
+  when: control_plane_manage_local_postgres | bool
+
+- name: Install NodeSource key on Debian-family hosts
+  become: true
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /usr/share/keyrings/nodesource-repo.gpg.key
+    mode: "0644"
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
+
+- name: Resolve apt architecture for NodeSource
+  ansible.builtin.set_fact:
+    control_plane_apt_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[ansible_facts.architecture] | default('amd64') }}"
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
+
+- name: Find stale NodeSource repository files
+  become: true
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns:
+      - "*nodesource*"
+    file_type: file
+  register: control_plane_nodesource_source_files
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
+
+- name: Remove stale NodeSource repository files
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ control_plane_nodesource_source_files.files | default([]) }}"
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
+
+- name: Add NodeSource repository on Debian-family hosts
+  become: true
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ control_plane_apt_arch }} signed-by=/usr/share/keyrings/nodesource-repo.gpg.key] https://deb.nodesource.com/node_{{ control_plane_node_major_version }}.x nodistro main"
+    filename: nodesource
+    state: present
+    update_cache: true
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
+
+- name: Install Node.js on Debian-family hosts
+  become: true
+  ansible.builtin.package:
+    name: nodejs
+    state: present
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_install_node | bool
 
 - name: Create control plane group
   become: true
@@ -84,6 +317,30 @@
       - corepack
       - enable
   changed_when: false
+  when: control_plane_use_corepack | bool
+
+- name: Activate pnpm with Corepack
+  become: true
+  ansible.builtin.command:
+    argv:
+      - corepack
+      - prepare
+      - "pnpm@{{ control_plane_pnpm_version }}"
+      - --activate
+  changed_when: false
+  when: control_plane_use_corepack | bool
+
+- name: Install pnpm globally with npm
+  become: true
+  ansible.builtin.command:
+    argv:
+      - npm
+      - install
+      - --global
+      - --force
+      - "pnpm@{{ control_plane_pnpm_version }}"
+  changed_when: true
+  when: not (control_plane_use_corepack | bool)
 
 - name: Check pnpm availability
   ansible.builtin.command:
@@ -144,9 +401,85 @@
   args:
     chdir: "{{ control_plane_app_dir }}"
   environment:
-    DATABASE_URL: "{{ control_plane_database_url }}"
+    DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
+
+- name: Verify local PostgreSQL app connection
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -h
+      - "{{ control_plane_postgres_host }}"
+      - -p
+      - "{{ control_plane_effective_postgres_port | string }}"
+      - -U
+      - "{{ control_plane_postgres_user }}"
+      - -d
+      - "{{ control_plane_postgres_database }}"
+      - -tAc
+      - SELECT 1
+  environment:
+    PGPASSWORD: "{{ control_plane_postgres_password }}"
+  register: control_plane_postgres_connection_check
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_schema_mode == "push"
+
+- name: Inspect local PostgreSQL listener after app connection failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -ltnp
+  register: control_plane_postgres_listener_check
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_schema_mode == "push"
+    - control_plane_postgres_connection_check.rc | default(0) != 0
+
+- name: Inspect managed PostgreSQL socket cluster after app connection failure
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -tAc
+      - "SELECT current_setting('port'), current_setting('listen_addresses'), current_database(), version();"
+  register: control_plane_postgres_socket_cluster_check
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_schema_mode == "push"
+    - control_plane_postgres_connection_check.rc | default(0) != 0
+
+- name: Show sanitized PostgreSQL app connection failure
+  ansible.builtin.debug:
+    msg:
+      - "PostgreSQL app connection failed. Sanitized stdout/stderr follows."
+      - "{{ control_plane_postgres_connection_check.stdout | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
+      - "{{ control_plane_postgres_connection_check.stderr | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
+      - "Listeners on port {{ control_plane_effective_postgres_port }}:"
+      - "{{ control_plane_postgres_listener_check.stdout_lines | default([]) | select('search', ':' ~ (control_plane_effective_postgres_port | string)) | list }}"
+      - "Managed socket cluster:"
+      - "{{ control_plane_postgres_socket_cluster_check.stdout | default('') }}"
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_schema_mode == "push"
+    - control_plane_postgres_connection_check.rc | default(0) != 0
+
+- name: Fail after PostgreSQL app connection failure
+  ansible.builtin.fail:
+    msg: "PostgreSQL app connection failed. See sanitized diagnostics above."
+  when:
+    - control_plane_manage_local_postgres | bool
+    - control_plane_schema_mode == "push"
+    - control_plane_postgres_connection_check.rc | default(0) != 0
 
 - name: Apply Prisma schema with db push
   become: true
@@ -158,10 +491,28 @@
   args:
     chdir: "{{ control_plane_app_dir }}"
   environment:
-    DATABASE_URL: "{{ control_plane_database_url }}"
-  changed_when: true
-  no_log: true
+    DATABASE_URL: "{{ control_plane_effective_database_url }}"
+  register: control_plane_db_push_result
+  changed_when: control_plane_db_push_result.rc == 0
+  failed_when: false
   when: control_plane_schema_mode == "push"
+
+- name: Show sanitized Prisma db push failure
+  ansible.builtin.debug:
+    msg:
+      - "Prisma db push failed. Sanitized stdout/stderr follows."
+      - "{{ control_plane_db_push_result.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_db_push_result.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+  when:
+    - control_plane_schema_mode == "push"
+    - control_plane_db_push_result.rc | default(0) != 0
+
+- name: Fail after Prisma db push failure
+  ansible.builtin.fail:
+    msg: "Prisma db push failed. See sanitized stdout/stderr above."
+  when:
+    - control_plane_schema_mode == "push"
+    - control_plane_db_push_result.rc | default(0) != 0
 
 - name: Apply Prisma migrations
   become: true
@@ -180,7 +531,7 @@
   args:
     chdir: "{{ control_plane_app_dir }}"
   environment:
-    DATABASE_URL: "{{ control_plane_database_url }}"
+    DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
   when: control_plane_schema_mode == "migrate"
@@ -195,7 +546,7 @@
   args:
     chdir: "{{ control_plane_app_dir }}"
   environment:
-    DATABASE_URL: "{{ control_plane_database_url }}"
+    DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
   when: control_plane_seed_database | bool
@@ -211,7 +562,7 @@
     chdir: "{{ control_plane_app_dir }}"
   environment:
     API_BASE_URL: "{{ control_plane_api_base_url }}"
-    DATABASE_URL: "{{ control_plane_database_url }}"
+    DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
 
@@ -224,7 +575,7 @@
     mode: "0640"
     content: |
       NODE_ENV=production
-      DATABASE_URL={{ control_plane_database_url }}
+      DATABASE_URL={{ control_plane_effective_database_url }}
       API_PORT={{ control_plane_api_port }}
       APP_BASE_URL={{ control_plane_app_base_url }}
       AUTH_SECRET={{ control_plane_auth_secret }}
@@ -312,9 +663,54 @@
     method: GET
     status_code: 200
   register: control_plane_api_health
+  failed_when: false
   retries: 12
   delay: 5
   until: control_plane_api_health.status == 200
+
+- name: Inspect API service after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - status
+      - eth-staking-api
+      - --no-pager
+      - -l
+  register: control_plane_api_service_status
+  changed_when: false
+  failed_when: false
+  when: control_plane_api_health.status | default(-1) != 200
+
+- name: Read API journal after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - -u
+      - eth-staking-api
+      - -n
+      - "80"
+      - --no-pager
+  register: control_plane_api_journal
+  changed_when: false
+  failed_when: false
+  when: control_plane_api_health.status | default(-1) != 200
+
+- name: Show sanitized API health check failure
+  ansible.builtin.debug:
+    msg:
+      - "API health check failed. Sanitized systemd status and recent journal follow."
+      - "{{ control_plane_api_service_status.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_service_status.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_journal.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_journal.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+  when: control_plane_api_health.status | default(-1) != 200
+
+- name: Fail after API health check failure
+  ansible.builtin.fail:
+    msg: "API health check failed. See sanitized systemd diagnostics above."
+  when: control_plane_api_health.status | default(-1) != 200
 
 - name: Wait for Web root
   ansible.builtin.uri:
@@ -322,6 +718,51 @@
     method: GET
     status_code: 200
   register: control_plane_web_health
+  failed_when: false
   retries: 12
   delay: 5
   until: control_plane_web_health.status == 200
+
+- name: Inspect Web service after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - status
+      - eth-staking-web
+      - --no-pager
+      - -l
+  register: control_plane_web_service_status
+  changed_when: false
+  failed_when: false
+  when: control_plane_web_health.status | default(-1) != 200
+
+- name: Read Web journal after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - -u
+      - eth-staking-web
+      - -n
+      - "80"
+      - --no-pager
+  register: control_plane_web_journal
+  changed_when: false
+  failed_when: false
+  when: control_plane_web_health.status | default(-1) != 200
+
+- name: Show sanitized Web health check failure
+  ansible.builtin.debug:
+    msg:
+      - "Web health check failed. Sanitized systemd status and recent journal follow."
+      - "{{ control_plane_web_service_status.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_service_status.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_journal.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_journal.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+  when: control_plane_web_health.status | default(-1) != 200
+
+- name: Fail after Web health check failure
+  ansible.builtin.fail:
+    msg: "Web health check failed. See sanitized systemd diagnostics above."
+  when: control_plane_web_health.status | default(-1) != 200

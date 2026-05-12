@@ -17,6 +17,10 @@ packages/db/src/generated/prisma
 # Real ops inventory files should stay outside the public repo
 infra/obol-cdvn/inventory/cluster.yml
 infra/obol-cdvn/inventory/hosts.yml
+infra/ansible/inventories/local/
+infra/ansible/inventories/prod/
+infra/ansible/private/
+*.vault.yml
 
 # Runtime metadata and staged artifacts
 **/render-bundle.env

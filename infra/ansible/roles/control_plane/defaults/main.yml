@@ -14,6 +14,18 @@ control_plane_log_dir: /var/log/eth-treasury-staking-automation
 control_plane_schema_mode: push
 control_plane_seed_database: false
 
+control_plane_install_node: false
+control_plane_node_major_version: 20
+control_plane_pnpm_version: "10.0.0"
+control_plane_use_corepack: false
+
+control_plane_manage_local_postgres: false
+control_plane_postgres_database: eth_staking_automation
+control_plane_postgres_user: eth_staking_app
+control_plane_postgres_password: change-me
+control_plane_postgres_host: 127.0.0.1
+control_plane_postgres_port: 5432
+
 control_plane_api_port: 4000
 control_plane_web_port: 3000
 control_plane_api_base_url: "http://127.0.0.1:{{ control_plane_api_port }}"

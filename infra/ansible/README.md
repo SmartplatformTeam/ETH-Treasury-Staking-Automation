@@ -6,14 +6,22 @@ It does not replace the CDVN scripts and does not create hosts, secrets, keys, D
 
 It also includes a minimal control-plane deployment role for the Web/API/Postgres-facing application host. That role prepares a release directory, applies the Prisma schema, builds the monorepo, registers systemd services, and verifies API/Web health.
 
+If you are new to Ansible, start with `USAGE.md`.
+
+For the first one-server Ubuntu MVP test on the current team server, follow `TEAM_SERVER_MVP.md`.
+
 ## Directory Structure
 
 ```text
 infra/ansible
 ├── ansible.cfg
+├── USAGE.md
+├── TEAM_SERVER_MVP.md
 ├── group_vars/all.example.yml
 ├── inventories/example/hosts.yml
+├── inventories/team-server.example/hosts.yml
 ├── playbooks
+│   ├── team-server-mvp.yml
 │   ├── control-plane.yml
 │   ├── bootstrap-host.yml
 │   ├── render-runtime.yml
@@ -69,10 +77,11 @@ The target is an already-prepared bare-metal operator host reachable by Ansible.
 The control-plane host must have:
 
 - Node.js 20+
-- Corepack
 - `pnpm`
 - outbound access to the configured PostgreSQL database
 - systemd
+
+For the team-server MVP playbook, Node.js and pnpm are installed automatically on Ubuntu.
 
 The host-local secure paths are assumed to exist or be created as directories only:
 
@@ -163,25 +172,42 @@ The API endpoint is `POST /v1/internal/cdvn/health-sync` and requires the `x-con
 From the repository root:
 
 ```bash
-ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/control-plane.yml --syntax-check
+ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+  ansible-playbook --syntax-check \
+  -i infra/ansible/inventories/example/hosts.yml \
+  infra/ansible/playbooks/control-plane.yml
 ```
 
 ```bash
-ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/render-runtime.yml
+ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+  ansible-playbook \
+  -i infra/ansible/inventories/example/hosts.yml \
+  infra/ansible/playbooks/render-runtime.yml
 ```
 
 ```bash
-ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/rollout-runtime.yml --extra-vars '{"execute":false}'
+ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+  ansible-playbook \
+  -i infra/ansible/inventories/example/hosts.yml \
+  infra/ansible/playbooks/rollout-runtime.yml \
+  --extra-vars '{"execute":false}'
 ```
 
 ```bash
-ansible-playbook -i infra/ansible/inventories/example/hosts.yml infra/ansible/playbooks/full-operator-mvp.yml --limit operator_1
+ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+  ansible-playbook \
+  -i infra/ansible/inventories/example/hosts.yml \
+  infra/ansible/playbooks/full-operator-mvp.yml \
+  --limit operator_1
 ```
 
 Syntax check:
 
 ```bash
-ansible-playbook --syntax-check infra/ansible/playbooks/full-operator-mvp.yml -i infra/ansible/inventories/example/hosts.yml
+ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+  ansible-playbook --syntax-check \
+  -i infra/ansible/inventories/example/hosts.yml \
+  infra/ansible/playbooks/full-operator-mvp.yml
 ```
 
 ## Dry-Run vs Execute
