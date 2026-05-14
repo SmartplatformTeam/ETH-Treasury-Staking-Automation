@@ -2,10 +2,12 @@
 - name: Resolve effective PostgreSQL port
   ansible.builtin.set_fact:
     control_plane_effective_postgres_port: "{{ control_plane_postgres_port }}"
+    control_plane_effective_postgres_host: "{{ 'postgres' if control_plane_deploy_mode == 'compose' else control_plane_postgres_host }}"
+    control_plane_uses_host_postgres: "{{ (control_plane_deploy_mode == 'systemd') and (control_plane_manage_local_postgres | bool) }}"
 
 - name: Resolve effective database URL
   ansible.builtin.set_fact:
-    control_plane_effective_database_url: "{{ control_plane_database_url | default('postgresql://' ~ (control_plane_postgres_user | urlencode) ~ ':' ~ (control_plane_postgres_password | urlencode) ~ '@' ~ control_plane_postgres_host ~ ':' ~ (control_plane_effective_postgres_port | string) ~ '/' ~ control_plane_postgres_database ~ '?schema=public') }}"
+    control_plane_effective_database_url: "{{ control_plane_database_url | default('postgresql://' ~ (control_plane_postgres_user | urlencode) ~ ':' ~ (control_plane_postgres_password | urlencode) ~ '@' ~ control_plane_effective_postgres_host ~ ':' ~ (control_plane_effective_postgres_port | string) ~ '/' ~ control_plane_postgres_database ~ '?schema=public') }}"
   no_log: true
 
 - name: Validate required control plane variables
@@ -21,15 +23,16 @@
       - control_plane_health_sync_token | length >= 16
       - control_plane_health_sync_token != "change-me"
       - "'REPLACE_WITH' not in control_plane_health_sync_token"
-      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_password != "change-me"
-      - (not (control_plane_manage_local_postgres | bool)) or 'REPLACE_WITH' not in control_plane_postgres_password
-      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_user is match('^[A-Za-z_][A-Za-z0-9_]*$')
-      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_database is match('^[A-Za-z_][A-Za-z0-9_]*$')
-      - (not (control_plane_manage_local_postgres | bool)) or control_plane_postgres_password is not search("'")
+      - control_plane_deploy_mode in ["systemd", "compose"]
+      - (not ((control_plane_uses_host_postgres | bool) or control_plane_deploy_mode == "compose")) or control_plane_postgres_password != "change-me"
+      - (not ((control_plane_uses_host_postgres | bool) or control_plane_deploy_mode == "compose")) or 'REPLACE_WITH' not in control_plane_postgres_password
+      - (not ((control_plane_uses_host_postgres | bool) or control_plane_deploy_mode == "compose")) or control_plane_postgres_user is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - (not ((control_plane_uses_host_postgres | bool) or control_plane_deploy_mode == "compose")) or control_plane_postgres_database is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - (not ((control_plane_uses_host_postgres | bool) or control_plane_deploy_mode == "compose")) or control_plane_postgres_password is not search("'")
       - control_plane_api_base_url is defined
       - control_plane_api_base_url | length > 0
       - control_plane_schema_mode in ["push", "migrate"]
-    fail_msg: "Set real database credentials, control_plane_auth_secret, control_plane_health_sync_token, control_plane_api_base_url, and a valid control_plane_schema_mode."
+    fail_msg: "Set a valid control_plane_deploy_mode, real database credentials, control_plane_auth_secret, control_plane_health_sync_token, control_plane_api_base_url, and a valid control_plane_schema_mode."
 
 - name: Install required control plane packages on Debian-family hosts
   become: true
@@ -45,6 +48,97 @@
     state: present
   when: ansible_facts.os_family | default("") == "Debian"
 
+- name: Check Docker CLI before compose package install
+  ansible.builtin.command:
+    argv:
+      - docker
+      - --version
+  register: control_plane_docker_cli_check
+  changed_when: false
+  failed_when: false
+  when: control_plane_deploy_mode == "compose"
+
+- name: Gather package facts before compose package install
+  become: true
+  ansible.builtin.package_facts:
+    manager: auto
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_deploy_mode == "compose"
+    - control_plane_docker_cli_check.rc | default(1) != 0
+
+- name: Check Docker CE package candidate
+  ansible.builtin.command:
+    argv:
+      - apt-cache
+      - policy
+      - docker-ce
+  register: control_plane_docker_ce_policy
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_deploy_mode == "compose"
+    - control_plane_docker_cli_check.rc | default(1) != 0
+    - "'containerd.io' in ansible_facts.packages"
+
+- name: Resolve Docker package set for compose deployment
+  ansible.builtin.set_fact:
+    control_plane_docker_packages: "{{ ['docker-ce', 'docker-ce-cli', 'containerd.io', 'docker-buildx-plugin', 'docker-compose-plugin'] if (('containerd.io' in ansible_facts.packages) and ('Candidate: (none)' not in (control_plane_docker_ce_policy.stdout | default('Candidate: (none)')))) else ['docker.io', 'docker-compose-plugin'] }}"
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_deploy_mode == "compose"
+    - control_plane_docker_cli_check.rc | default(1) != 0
+
+- name: Install Docker packages for compose deployment on Debian-family hosts
+  become: true
+  ansible.builtin.package:
+    name: "{{ control_plane_docker_packages }}"
+    state: present
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_deploy_mode == "compose"
+    - control_plane_docker_cli_check.rc | default(1) != 0
+
+- name: Check Docker Compose plugin before compose package install
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - version
+  register: control_plane_docker_compose_check
+  changed_when: false
+  failed_when: false
+  when: control_plane_deploy_mode == "compose"
+
+- name: Install Docker Compose plugin when Docker already exists
+  become: true
+  ansible.builtin.package:
+    name: docker-compose-plugin
+    state: present
+  when:
+    - ansible_facts.os_family | default("") == "Debian"
+    - control_plane_deploy_mode == "compose"
+    - control_plane_docker_cli_check.rc | default(1) == 0
+    - control_plane_docker_compose_check.rc | default(1) != 0
+
+- name: Verify Docker Compose plugin for compose deployment
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - version
+  changed_when: false
+  when: control_plane_deploy_mode == "compose"
+
+- name: Start Docker service for compose deployment
+  become: true
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+  when: control_plane_deploy_mode == "compose"
+
 - name: Install local PostgreSQL on Debian-family hosts
   become: true
   ansible.builtin.package:
@@ -54,7 +148,7 @@
     state: present
   when:
     - ansible_facts.os_family | default("") == "Debian"
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
 
 - name: Start local PostgreSQL service
   become: true
@@ -62,7 +156,7 @@
     name: postgresql
     state: started
     enabled: true
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Discover managed local PostgreSQL port
   become: true
@@ -75,7 +169,7 @@
   register: control_plane_local_postgres_port_discovery
   changed_when: false
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_database_url is not defined
 
 - name: Resolve effective local PostgreSQL connection
@@ -84,7 +178,7 @@
     control_plane_effective_database_url: "{{ 'postgresql://' ~ (control_plane_postgres_user | urlencode) ~ ':' ~ (control_plane_postgres_password | urlencode) ~ '@' ~ control_plane_postgres_host ~ ':' ~ (control_plane_local_postgres_port_discovery.stdout | trim) ~ '/' ~ control_plane_postgres_database ~ '?schema=public' }}"
   no_log: true
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_database_url is not defined
 
 - name: Check local PostgreSQL app role
@@ -97,7 +191,7 @@
       - "SELECT 1 FROM pg_roles WHERE rolname='{{ control_plane_postgres_user }}'"
   register: control_plane_postgres_role_check
   changed_when: false
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Create local PostgreSQL app role
   become: true
@@ -110,7 +204,7 @@
   changed_when: true
   no_log: true
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_postgres_role_check.stdout | trim != "1"
 
 - name: Update local PostgreSQL app role password
@@ -128,7 +222,7 @@
   register: control_plane_postgres_password_update
   changed_when: false
   failed_when: false
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Show sanitized PostgreSQL password update failure
   ansible.builtin.debug:
@@ -137,14 +231,14 @@
       - "{{ control_plane_postgres_password_update.stdout | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
       - "{{ control_plane_postgres_password_update.stderr | default('') | replace(control_plane_postgres_password, '[DB_PASSWORD]') }}"
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_postgres_password_update.rc | default(0) != 0
 
 - name: Fail after PostgreSQL password update failure
   ansible.builtin.fail:
     msg: "PostgreSQL role password update failed. See sanitized stdout/stderr above."
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_postgres_password_update.rc | default(0) != 0
 
 - name: Check local PostgreSQL app database
@@ -157,7 +251,7 @@
       - "SELECT 1 FROM pg_database WHERE datname='{{ control_plane_postgres_database }}'"
   register: control_plane_postgres_database_check
   changed_when: false
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Create local PostgreSQL app database
   become: true
@@ -171,7 +265,7 @@
   changed_when: true
   no_log: true
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_postgres_database_check.stdout | trim != "1"
 
 - name: Ensure local PostgreSQL app database ownership
@@ -186,7 +280,7 @@
       - "ALTER DATABASE \"{{ control_plane_postgres_database }}\" OWNER TO \"{{ control_plane_postgres_user }}\";"
   changed_when: false
   no_log: true
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Ensure local PostgreSQL public schema ownership
   become: true
@@ -202,7 +296,7 @@
       - "CREATE SCHEMA IF NOT EXISTS public; ALTER SCHEMA public OWNER TO \"{{ control_plane_postgres_user }}\"; GRANT ALL ON SCHEMA public TO \"{{ control_plane_postgres_user }}\";"
   changed_when: false
   no_log: true
-  when: control_plane_manage_local_postgres | bool
+  when: control_plane_uses_host_postgres | bool
 
 - name: Install NodeSource key on Debian-family hosts
   become: true
@@ -303,12 +397,14 @@
       - --version
   register: control_plane_node_version
   changed_when: false
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Require Node.js 20 or newer
   ansible.builtin.assert:
     that:
       - (control_plane_node_version.stdout | regex_replace('^v', '') | split('.') | first | int) >= 20
     fail_msg: "Node.js 20+ must be installed before deploying the control plane."
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Enable Corepack
   become: true
@@ -317,7 +413,9 @@
       - corepack
       - enable
   changed_when: false
-  when: control_plane_use_corepack | bool
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_use_corepack | bool
 
 - name: Activate pnpm with Corepack
   become: true
@@ -328,7 +426,9 @@
       - "pnpm@{{ control_plane_pnpm_version }}"
       - --activate
   changed_when: false
-  when: control_plane_use_corepack | bool
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_use_corepack | bool
 
 - name: Install pnpm globally with npm
   become: true
@@ -340,7 +440,9 @@
       - --force
       - "pnpm@{{ control_plane_pnpm_version }}"
   changed_when: true
-  when: not (control_plane_use_corepack | bool)
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - not (control_plane_use_corepack | bool)
 
 - name: Check pnpm availability
   ansible.builtin.command:
@@ -348,6 +450,7 @@
       - pnpm
       - --version
   changed_when: false
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Build local release archive
   ansible.builtin.command:
@@ -379,6 +482,28 @@
     group: "{{ control_plane_group }}"
   when: control_plane_sync_source | bool
 
+- name: Check for existing compose deployment
+  become: true
+  ansible.builtin.stat:
+    path: "{{ control_plane_compose_file }}"
+  register: control_plane_existing_compose_file
+
+- name: Stop compose deployment before systemd deployment
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - down
+  register: control_plane_compose_down_for_systemd
+  changed_when: control_plane_compose_down_for_systemd.rc == 0
+  failed_when: false
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_existing_compose_file.stat.exists
+
 - name: Install workspace dependencies
   become: true
   become_user: "{{ control_plane_user }}"
@@ -390,6 +515,7 @@
   args:
     chdir: "{{ control_plane_app_dir }}"
   changed_when: true
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Generate Prisma client
   become: true
@@ -404,6 +530,7 @@
     DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Verify local PostgreSQL app connection
   ansible.builtin.command:
@@ -425,7 +552,7 @@
   changed_when: false
   failed_when: false
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_schema_mode == "push"
 
 - name: Inspect local PostgreSQL listener after app connection failure
@@ -438,7 +565,7 @@
   changed_when: false
   failed_when: false
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_schema_mode == "push"
     - control_plane_postgres_connection_check.rc | default(0) != 0
 
@@ -454,7 +581,7 @@
   changed_when: false
   failed_when: false
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_schema_mode == "push"
     - control_plane_postgres_connection_check.rc | default(0) != 0
 
@@ -469,7 +596,7 @@
       - "Managed socket cluster:"
       - "{{ control_plane_postgres_socket_cluster_check.stdout | default('') }}"
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_schema_mode == "push"
     - control_plane_postgres_connection_check.rc | default(0) != 0
 
@@ -477,7 +604,7 @@
   ansible.builtin.fail:
     msg: "PostgreSQL app connection failed. See sanitized diagnostics above."
   when:
-    - control_plane_manage_local_postgres | bool
+    - control_plane_uses_host_postgres | bool
     - control_plane_schema_mode == "push"
     - control_plane_postgres_connection_check.rc | default(0) != 0
 
@@ -495,7 +622,9 @@
   register: control_plane_db_push_result
   changed_when: control_plane_db_push_result.rc == 0
   failed_when: false
-  when: control_plane_schema_mode == "push"
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_schema_mode == "push"
 
 - name: Show sanitized Prisma db push failure
   ansible.builtin.debug:
@@ -504,6 +633,7 @@
       - "{{ control_plane_db_push_result.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
       - "{{ control_plane_db_push_result.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
   when:
+    - control_plane_deploy_mode == "systemd"
     - control_plane_schema_mode == "push"
     - control_plane_db_push_result.rc | default(0) != 0
 
@@ -511,6 +641,7 @@
   ansible.builtin.fail:
     msg: "Prisma db push failed. See sanitized stdout/stderr above."
   when:
+    - control_plane_deploy_mode == "systemd"
     - control_plane_schema_mode == "push"
     - control_plane_db_push_result.rc | default(0) != 0
 
@@ -534,7 +665,9 @@
     DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
-  when: control_plane_schema_mode == "migrate"
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_schema_mode == "migrate"
 
 - name: Seed database when explicitly requested
   become: true
@@ -549,7 +682,9 @@
     DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
-  when: control_plane_seed_database | bool
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_seed_database | bool
 
 - name: Build control plane packages
   become: true
@@ -565,6 +700,7 @@
     DATABASE_URL: "{{ control_plane_effective_database_url }}"
   changed_when: true
   no_log: true
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Write API environment file
   become: true
@@ -584,6 +720,7 @@
   no_log: true
   notify:
     - Restart control plane api
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Write Web environment file
   become: true
@@ -597,6 +734,7 @@
       API_BASE_URL={{ control_plane_api_base_url }}
   notify:
     - Restart control plane web
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Write API systemd unit
   become: true
@@ -625,6 +763,7 @@
   notify:
     - Reload systemd
     - Restart control plane api
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Write Web systemd unit
   become: true
@@ -653,9 +792,253 @@
   notify:
     - Reload systemd
     - Restart control plane web
+  when: control_plane_deploy_mode == "systemd"
+
+- name: Check existing API systemd unit before compose deployment
+  become: true
+  ansible.builtin.stat:
+    path: /etc/systemd/system/eth-staking-api.service
+  register: control_plane_api_systemd_unit
+  when: control_plane_deploy_mode == "compose"
+
+- name: Check existing Web systemd unit before compose deployment
+  become: true
+  ansible.builtin.stat:
+    path: /etc/systemd/system/eth-staking-web.service
+  register: control_plane_web_systemd_unit
+  when: control_plane_deploy_mode == "compose"
+
+- name: Stop API systemd service before compose deployment
+  become: true
+  ansible.builtin.systemd:
+    name: eth-staking-api
+    state: stopped
+    enabled: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_api_systemd_unit.stat.exists | default(false)
+
+- name: Stop Web systemd service before compose deployment
+  become: true
+  ansible.builtin.systemd:
+    name: eth-staking-web
+    state: stopped
+    enabled: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_web_systemd_unit.stat.exists | default(false)
+
+- name: Write compose environment file
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ control_plane_compose_env_file }}"
+    owner: root
+    group: "{{ control_plane_group }}"
+    mode: "0640"
+    content: |
+      POSTGRES_DB={{ control_plane_postgres_database }}
+      POSTGRES_USER={{ control_plane_postgres_user }}
+      POSTGRES_PASSWORD={{ control_plane_postgres_password }}
+      NODE_ENV=production
+      DATABASE_URL={{ control_plane_effective_database_url }}
+      API_PORT={{ control_plane_api_port }}
+      APP_BASE_URL={{ control_plane_app_base_url }}
+      AUTH_SECRET={{ control_plane_auth_secret }}
+      REDIS_URL={{ control_plane_redis_url }}
+      CDVN_HEALTH_SYNC_TOKEN={{ control_plane_health_sync_token }}
+      API_BASE_URL={{ control_plane_compose_web_api_base_url }}
+  no_log: true
+  when: control_plane_deploy_mode == "compose"
+
+- name: Write control plane compose file
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ control_plane_compose_file }}"
+    owner: root
+    group: "{{ control_plane_group }}"
+    mode: "0640"
+    content: |
+      name: {{ control_plane_compose_project_name }}
+
+      services:
+        postgres:
+          image: {{ control_plane_postgres_image }}
+          restart: unless-stopped
+          env_file:
+            - "{{ control_plane_compose_env_file }}"
+          volumes:
+            - postgres-data:/var/lib/postgresql/data
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+
+        api:
+          image: {{ control_plane_compose_image_name }}:{{ control_plane_compose_image_tag }}
+          build:
+            context: {{ control_plane_app_dir }}
+            dockerfile: infra/docker/control-plane.Dockerfile
+            args:
+              PNPM_VERSION: "{{ control_plane_pnpm_version }}"
+              API_BASE_URL: "{{ control_plane_api_base_url }}"
+          restart: unless-stopped
+          env_file:
+            - "{{ control_plane_compose_env_file }}"
+          ports:
+            - "{{ control_plane_bind_address }}:{{ control_plane_api_port }}:{{ control_plane_api_port }}"
+          depends_on:
+            postgres:
+              condition: service_healthy
+          command: ["pnpm", "--filter", "@eth-staking/api", "exec", "node", "dist/main.js"]
+
+        web:
+          image: {{ control_plane_compose_image_name }}:{{ control_plane_compose_image_tag }}
+          restart: unless-stopped
+          env_file:
+            - "{{ control_plane_compose_env_file }}"
+          ports:
+            - "{{ control_plane_bind_address }}:{{ control_plane_web_port }}:{{ control_plane_web_port }}"
+          depends_on:
+            api:
+              condition: service_started
+          command: ["pnpm", "--filter", "@eth-staking/web", "exec", "next", "start", "--hostname", "0.0.0.0", "--port", "{{ control_plane_web_port }}"]
+
+      volumes:
+        postgres-data:
+  when: control_plane_deploy_mode == "compose"
+
+- name: Build compose application image
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - build
+  changed_when: true
+  when: control_plane_deploy_mode == "compose"
+
+- name: Start compose PostgreSQL service
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - up
+      - -d
+      - postgres
+  changed_when: true
+  when: control_plane_deploy_mode == "compose"
+
+- name: Wait for compose PostgreSQL readiness
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - exec
+      - -T
+      - postgres
+      - pg_isready
+      - -U
+      - "{{ control_plane_postgres_user }}"
+      - -d
+      - "{{ control_plane_postgres_database }}"
+  register: control_plane_compose_postgres_ready
+  changed_when: false
+  retries: 20
+  delay: 3
+  until: control_plane_compose_postgres_ready.rc == 0
+  when: control_plane_deploy_mode == "compose"
+
+- name: Apply Prisma schema with compose db push
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - run
+      - --rm
+      - api
+      - pnpm
+      - db:push
+  changed_when: true
+  no_log: true
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_schema_mode == "push"
+
+- name: Apply Prisma migrations with compose
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - run
+      - --rm
+      - api
+      - pnpm
+      - --filter
+      - "@eth-staking/db"
+      - exec
+      - prisma
+      - migrate
+      - deploy
+      - --schema
+      - prisma/schema.prisma
+  changed_when: true
+  no_log: true
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_schema_mode == "migrate"
+
+- name: Seed compose database when explicitly requested
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - run
+      - --rm
+      - api
+      - pnpm
+      - db:seed
+  changed_when: true
+  no_log: true
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_seed_database | bool
+
+- name: Start compose API and Web services
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - up
+      - -d
+      - api
+      - web
+  changed_when: true
+  when: control_plane_deploy_mode == "compose"
 
 - name: Flush service handlers before health checks
   ansible.builtin.meta: flush_handlers
+  when: control_plane_deploy_mode == "systemd"
 
 - name: Wait for API health endpoint
   ansible.builtin.uri:
@@ -680,7 +1063,9 @@
   register: control_plane_api_service_status
   changed_when: false
   failed_when: false
-  when: control_plane_api_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_api_health.status | default(-1) != 200
 
 - name: Read API journal after health check failure
   become: true
@@ -695,7 +1080,9 @@
   register: control_plane_api_journal
   changed_when: false
   failed_when: false
-  when: control_plane_api_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_api_health.status | default(-1) != 200
 
 - name: Show sanitized API health check failure
   ansible.builtin.debug:
@@ -705,12 +1092,71 @@
       - "{{ control_plane_api_service_status.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
       - "{{ control_plane_api_journal.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
       - "{{ control_plane_api_journal.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
-  when: control_plane_api_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_api_health.status | default(-1) != 200
 
 - name: Fail after API health check failure
   ansible.builtin.fail:
     msg: "API health check failed. See sanitized systemd diagnostics above."
-  when: control_plane_api_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_api_health.status | default(-1) != 200
+
+- name: Inspect compose services after API health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - ps
+  register: control_plane_api_compose_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_api_health.status | default(-1) != 200
+
+- name: Read compose API logs after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - logs
+      - --no-color
+      - --tail
+      - "80"
+      - api
+  register: control_plane_api_compose_logs
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_api_health.status | default(-1) != 200
+
+- name: Show sanitized compose API health check failure
+  ansible.builtin.debug:
+    msg:
+      - "API health check failed. Sanitized compose ps and logs follow."
+      - "{{ control_plane_api_compose_ps.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_compose_ps.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_compose_logs.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_api_compose_logs.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_api_health.status | default(-1) != 200
+
+- name: Fail after compose API health check failure
+  ansible.builtin.fail:
+    msg: "API health check failed. See sanitized compose diagnostics above."
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_api_health.status | default(-1) != 200
 
 - name: Wait for Web root
   ansible.builtin.uri:
@@ -735,7 +1181,9 @@
   register: control_plane_web_service_status
   changed_when: false
   failed_when: false
-  when: control_plane_web_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_web_health.status | default(-1) != 200
 
 - name: Read Web journal after health check failure
   become: true
@@ -750,7 +1198,9 @@
   register: control_plane_web_journal
   changed_when: false
   failed_when: false
-  when: control_plane_web_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_web_health.status | default(-1) != 200
 
 - name: Show sanitized Web health check failure
   ansible.builtin.debug:
@@ -760,9 +1210,68 @@
       - "{{ control_plane_web_service_status.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
       - "{{ control_plane_web_journal.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
       - "{{ control_plane_web_journal.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
-  when: control_plane_web_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_web_health.status | default(-1) != 200
 
 - name: Fail after Web health check failure
   ansible.builtin.fail:
     msg: "Web health check failed. See sanitized systemd diagnostics above."
-  when: control_plane_web_health.status | default(-1) != 200
+  when:
+    - control_plane_deploy_mode == "systemd"
+    - control_plane_web_health.status | default(-1) != 200
+
+- name: Inspect compose services after Web health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - ps
+  register: control_plane_web_compose_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_web_health.status | default(-1) != 200
+
+- name: Read compose Web logs after health check failure
+  become: true
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ control_plane_compose_file }}"
+      - logs
+      - --no-color
+      - --tail
+      - "80"
+      - web
+  register: control_plane_web_compose_logs
+  changed_when: false
+  failed_when: false
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_web_health.status | default(-1) != 200
+
+- name: Show sanitized compose Web health check failure
+  ansible.builtin.debug:
+    msg:
+      - "Web health check failed. Sanitized compose ps and logs follow."
+      - "{{ control_plane_web_compose_ps.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_compose_ps.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_compose_logs.stdout | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+      - "{{ control_plane_web_compose_logs.stderr | default('') | replace(control_plane_effective_database_url, '[DATABASE_URL]') | replace(control_plane_postgres_password, '[DB_PASSWORD]') | replace((control_plane_postgres_password | urlencode), '[DB_PASSWORD]') }}"
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_web_health.status | default(-1) != 200
+
+- name: Fail after compose Web health check failure
+  ansible.builtin.fail:
+    msg: "Web health check failed. See sanitized compose diagnostics above."
+  when:
+    - control_plane_deploy_mode == "compose"
+    - control_plane_web_health.status | default(-1) != 200

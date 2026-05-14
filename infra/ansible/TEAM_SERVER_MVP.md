@@ -5,10 +5,10 @@
 목표:
 
 1. 로컬 Mac에서 Ansible로 팀서버에 SSH 접속한다.
-2. 팀서버에 Node.js 20, pnpm, PostgreSQL을 설치한다.
+2. 배포 모드를 고른다: host `systemd` 설치 또는 Docker Compose.
 3. 이 repo를 release archive로 묶어 팀서버 `/opt/eth-treasury-staking-automation`에 배포한다.
-4. Prisma schema를 local PostgreSQL에 적용하고 seed data를 넣는다.
-5. API/Web을 systemd service로 등록한다.
+4. Prisma schema를 PostgreSQL에 적용하고 seed data를 넣는다.
+5. API/Web을 systemd service 또는 compose service로 등록한다.
 6. `http://TEAM_SERVER:4000/v1/health`, `http://TEAM_SERVER:3000`으로 확인한다.
 
 ## 1. 전제
@@ -20,6 +20,7 @@
 - `ubuntu` 또는 sudo 가능한 사용자
 - outbound internet 가능
 - inbound `3000`, `4000` 포트 접근 가능
+- Docker Compose 모드에서는 Docker Hub 접근 가능
 
 로컬 Mac:
 
@@ -87,6 +88,7 @@ all:
           ansible_host: TEAM_SERVER_IP
           ansible_user: ubuntu
       vars:
+        control_plane_deploy_mode: systemd
         control_plane_api_port: 4000
         control_plane_web_port: 3000
         control_plane_api_base_url: http://TEAM_SERVER_IP:4000
@@ -111,7 +113,9 @@ openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 32; echo
 - 이 inventory는 commit하지 않는다.
 - `control_plane_auth_secret`, `control_plane_health_sync_token`, `control_plane_postgres_password`는 서로 다른 값을 쓴다.
 - `control_plane_postgres_password`는 shell quoting 이슈를 피하려고 영문/숫자 위주로 만든다.
-- `team-server-mvp.yml`은 로컬 PostgreSQL을 설치/관리한다. 서버에서 Docker 등이 `5432`를 이미 쓰고 있으면 Ubuntu PostgreSQL 클러스터가 `5433` 같은 다른 포트로 올라갈 수 있으며, role은 실제 클러스터 포트를 자동 감지해 `DATABASE_URL`에 반영한다.
+- `control_plane_deploy_mode: systemd`는 Node.js/pnpm/PostgreSQL을 host에 설치하고 API/Web을 systemd로 실행한다.
+- `control_plane_deploy_mode: compose`는 Docker Compose로 `api`, `web`, `postgres`를 같은 compose 네트워크에 올린다. 이 모드에서는 `control_plane_database_url`을 따로 주지 않으면 `postgres` service name을 쓰는 내부 URL이 자동 생성된다.
+- systemd 모드에서 서버의 Docker 등이 `5432`를 이미 쓰고 있으면 Ubuntu PostgreSQL 클러스터가 `5433` 같은 다른 포트로 올라갈 수 있으며, role은 실제 클러스터 포트를 자동 감지해 `DATABASE_URL`에 반영한다.
 
 ## 4. Syntax Check
 
@@ -173,6 +177,8 @@ ansible-playbook \
 
 이 playbook은 팀서버에서 다음을 수행한다.
 
+`control_plane_deploy_mode: systemd`:
+
 1. 필수 변수 검증
 2. PostgreSQL 설치 및 시작
 3. local DB user/database 생성
@@ -188,6 +194,21 @@ ansible-playbook \
 13. `pnpm build`
 14. `eth-staking-api`, `eth-staking-web` systemd service 등록
 15. API/Web health check
+
+`control_plane_deploy_mode: compose`:
+
+1. 필수 변수 검증
+2. Docker/Docker Compose plugin 설치 및 시작
+3. control-plane Linux user/group 생성
+4. repo release archive를 팀서버로 배포
+5. 기존 `eth-staking-api`, `eth-staking-web` systemd service가 있으면 중지
+6. `/etc/eth-treasury-staking-automation/docker-compose.yml`, `compose.env` 작성
+7. API/Web image build
+8. PostgreSQL compose service 시작
+9. `docker compose run --rm api pnpm db:push`
+10. `docker compose run --rm api pnpm db:seed`
+11. API/Web compose service 시작
+12. API/Web health check
 
 ## 7. 배포 확인
 
@@ -213,6 +234,13 @@ ssh ubuntu@TEAM_SERVER_IP 'systemctl status eth-staking-api --no-pager'
 ssh ubuntu@TEAM_SERVER_IP 'systemctl status eth-staking-web --no-pager'
 ```
 
+Compose 모드 service 확인:
+
+```bash
+ssh ubuntu@TEAM_SERVER_IP \
+  'sudo docker compose -f /etc/eth-treasury-staking-automation/docker-compose.yml ps'
+```
+
 로그 확인:
 
 ```bash
@@ -225,6 +253,13 @@ DB 확인:
 ```bash
 ssh ubuntu@TEAM_SERVER_IP \
   'sudo -u postgres psql -d eth_staking_automation -c "select count(*) from \"Cluster\";"'
+```
+
+Compose 모드 DB 확인:
+
+```bash
+ssh ubuntu@TEAM_SERVER_IP \
+  'sudo docker compose -f /etc/eth-treasury-staking-automation/docker-compose.yml exec -T postgres psql -U eth_staking_app -d eth_staking_automation -c "select count(*) from \"Cluster\";"'
 ```
 
 ## 8. 다시 배포하기

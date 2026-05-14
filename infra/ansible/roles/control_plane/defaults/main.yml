@@ -11,6 +11,7 @@ control_plane_app_dir: /opt/eth-treasury-staking-automation
 control_plane_env_dir: /etc/eth-treasury-staking-automation
 control_plane_log_dir: /var/log/eth-treasury-staking-automation
 
+control_plane_deploy_mode: systemd
 control_plane_schema_mode: push
 control_plane_seed_database: false
 
@@ -25,11 +26,20 @@ control_plane_postgres_user: eth_staking_app
 control_plane_postgres_password: change-me
 control_plane_postgres_host: 127.0.0.1
 control_plane_postgres_port: 5432
+control_plane_postgres_image: postgres:16
 
 control_plane_api_port: 4000
 control_plane_web_port: 3000
+control_plane_bind_address: 0.0.0.0
 control_plane_api_base_url: "http://127.0.0.1:{{ control_plane_api_port }}"
 control_plane_app_base_url: "http://127.0.0.1:{{ control_plane_web_port }}"
 control_plane_redis_url: redis://127.0.0.1:6379
 control_plane_health_sync_token: change-me
 control_plane_systemd_path: /usr/local/bin:/usr/bin:/bin
+
+control_plane_compose_project_name: eth-staking-control-plane
+control_plane_compose_file: "{{ control_plane_env_dir }}/docker-compose.yml"
+control_plane_compose_env_file: "{{ control_plane_env_dir }}/compose.env"
+control_plane_compose_image_name: eth-staking-control-plane
+control_plane_compose_image_tag: latest
+control_plane_compose_web_api_base_url: "http://api:{{ control_plane_api_port }}"

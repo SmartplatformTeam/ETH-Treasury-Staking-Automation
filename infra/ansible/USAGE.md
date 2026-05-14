@@ -167,6 +167,7 @@ secret이 들어가는 값은 repo 밖에 둔다.
 
 ```bash
 cat > ~/.config/eth-staking-ansible/control-plane.vars.yml <<'EOF'
+control_plane_deploy_mode: systemd
 control_plane_database_url: postgresql://USER:PASSWORD@DB_HOST:5432/eth_staking_automation?schema=public
 control_plane_auth_secret: REPLACE_WITH_LONG_RANDOM_SECRET
 control_plane_health_sync_token: REPLACE_WITH_LONG_RANDOM_SYNC_TOKEN
@@ -178,6 +179,8 @@ EOF
 ```
 
 `control_plane_schema_mode`는 지금은 `push`가 기본이다. Prisma migration history가 생기면 운영에서는 `migrate`로 바꾼다.
+
+`control_plane_deploy_mode`는 `systemd` 또는 `compose`다. `compose`로 설정하면 API/Web/PostgreSQL을 Docker Compose project 하나로 실행하며, `control_plane_database_url`을 생략하면 API 컨테이너는 `postgresql://...@postgres:5432/...` 내부 URL을 쓴다.
 
 Operator health sync용 token도 같은 값을 사용한다.
 
@@ -193,11 +196,8 @@ EOF
 Control Plane host 사전 조건:
 
 - SSH 접속 가능
-- Node.js 20+
-- Corepack
-- pnpm
-- systemd
-- PostgreSQL 접속 가능
+- systemd 모드: Node.js 20+, Corepack, pnpm, PostgreSQL 접속 가능
+- compose 모드: Docker Hub 접근 가능. team-server MVP playbook은 Docker/Docker Compose plugin을 설치한다.
 
 syntax check:
 
@@ -216,7 +216,7 @@ ansible-playbook \
   --extra-vars @~/.config/eth-staking-ansible/control-plane.vars.yml
 ```
 
-이 playbook은 다음을 수행한다.
+이 playbook은 systemd 모드에서 다음을 수행한다.
 
 1. 필수 변수 검증
 2. control-plane user/group 생성
@@ -228,6 +228,8 @@ ansible-playbook \
 8. `pnpm build`
 9. API/Web systemd service 등록
 10. `/v1/health`와 Web root health check
+
+compose 모드에서는 Docker Compose file/env를 쓰고, app image build 후 `postgres`, `api`, `web` 서비스를 같은 compose 네트워크에 띄운다.
 
 실행 후 확인:
 

@@ -74,14 +74,14 @@ The target is an already-prepared bare-metal operator host reachable by Ansible.
 - `ca-certificates`
 - `chrony` or an equivalent time sync service
 
-The control-plane host must have:
+The control-plane host must have these for `control_plane_deploy_mode: systemd`:
 
 - Node.js 20+
 - `pnpm`
 - outbound access to the configured PostgreSQL database
 - systemd
 
-For the team-server MVP playbook, Node.js and pnpm are installed automatically on Ubuntu.
+For `control_plane_deploy_mode: compose`, the team-server MVP playbook installs Docker and the Docker Compose plugin on Ubuntu, then runs `api`, `web`, and `postgres` in one compose project. For the team-server MVP systemd mode, Node.js, pnpm, and local PostgreSQL are installed automatically on Ubuntu.
 
 The host-local secure paths are assumed to exist or be created as directories only:
 
@@ -112,11 +112,14 @@ The backend stores the approval id and metadata. It does not store approval env 
 
 The control-plane deployment role expects private values for:
 
-- `control_plane_database_url`
+- `control_plane_deploy_mode` (`systemd` or `compose`)
+- `control_plane_database_url` for systemd/external DB deployments
 - `control_plane_auth_secret`
 - `control_plane_health_sync_token`
 - `control_plane_api_base_url`
 - `control_plane_app_base_url`
+
+In compose mode, omit `control_plane_database_url` unless you intentionally want an external database. The role then generates `postgresql://...@postgres:5432/...` for the API container and starts the `postgres` service in the same compose network.
 
 Example:
 
@@ -127,7 +130,7 @@ ansible-playbook \
   --extra-vars @infra/ansible/private/control-plane.vars.yml
 ```
 
-The role performs:
+The role performs this in systemd mode:
 
 1. validates required runtime variables
 2. creates an application user and directories
@@ -142,6 +145,8 @@ The role performs:
 11. writes API/Web env files under `/etc/eth-treasury-staking-automation`
 12. registers `eth-staking-api` and `eth-staking-web` systemd services
 13. checks `http://127.0.0.1:4000/v1/health` and Web root
+
+In compose mode it instead installs Docker, writes `/etc/eth-treasury-staking-automation/docker-compose.yml`, builds the app image, starts `postgres`, applies the Prisma schema/seed from an API one-shot container, and then starts `api` and `web`.
 
 `control_plane_schema_mode` defaults to `push` because this repository currently has a Prisma schema and seed, but no migration history. Production should switch to `migrate` after migrations are added.
 

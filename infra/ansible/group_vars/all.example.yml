@@ -20,6 +20,7 @@ verify_deployed: false
 min_disk_gb: 20
 artifact_stage_force: false
 
+control_plane_deploy_mode: systemd
 control_plane_database_url: postgresql://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/eth_staking_automation?schema=public
 control_plane_auth_secret: REPLACE_WITH_LONG_RANDOM_AUTH_SECRET
 control_plane_health_sync_token: REPLACE_WITH_HEALTH_SYNC_TOKEN

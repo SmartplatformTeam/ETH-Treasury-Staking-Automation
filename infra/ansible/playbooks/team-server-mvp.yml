@@ -5,7 +5,7 @@
   roles:
     - role: control_plane
       vars:
-        control_plane_install_node: true
-        control_plane_manage_local_postgres: true
+        control_plane_install_node: "{{ (control_plane_deploy_mode | default('systemd')) == 'systemd' }}"
+        control_plane_manage_local_postgres: "{{ (control_plane_deploy_mode | default('systemd')) == 'systemd' }}"
         control_plane_schema_mode: push
         control_plane_seed_database: true
