@@ -111,6 +111,39 @@ async function main() {
     }
   });
 
+  const sandboxCluster = await prisma.cluster.upsert({
+    where: { name: "team-sandbox-obol-a" },
+    update: {},
+    create: {
+      name: "team-sandbox-obol-a",
+      type: ClusterType.OBOL_DVT,
+      network: Network.MAINNET,
+      baselineVersion: "CDVN v1.9.5",
+      overlayVersion: "web3signer@2026-05-18",
+      obolClusterId: "obol-team-sandbox-a",
+      threshold: 3,
+      operatorCount: 4,
+      relayMode: "obol",
+      signerMode: "web3signer",
+      charonEnrs: []
+    }
+  });
+
+  await prisma.operatorHost.upsert({
+    where: { name: "operator-sandbox-1" },
+    update: {},
+    create: {
+      name: "operator-sandbox-1",
+      address: "host.docker.internal",
+      region: "team-server",
+      profile: "baseline",
+      baselineVersion: sandboxCluster.baselineVersion,
+      overlayVersion: sandboxCluster.overlayVersion,
+      healthStatus: HealthStatus.UNKNOWN,
+      clusterId: sandboxCluster.id
+    }
+  });
+
   const signer = await prisma.signer.upsert({
     where: { name: "signer-mainnet-a-1" },
     update: {},

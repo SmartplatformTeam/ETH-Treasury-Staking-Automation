@@ -120,6 +120,7 @@ enum DkgCeremonyStatus {
 
 enum AutomationOperation {
   BOOTSTRAP_HOST
+  VERIFY_BASELINE
   RENDER_RUNTIME
   VERIFY_RUNTIME
   ROLLOUT_DRY_RUN

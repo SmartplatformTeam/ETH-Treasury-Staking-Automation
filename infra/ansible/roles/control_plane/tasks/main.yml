@@ -850,6 +850,42 @@
   no_log: true
   when: control_plane_deploy_mode == "compose"
 
+- name: Ensure control plane SSH key directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ control_plane_host_ssh_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: control_plane_deploy_mode == "compose"
+
+- name: Generate control plane SSH key if missing
+  become: true
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -N "" -C "eth-staking-control-plane@{{ ansible_hostname }}" -f {{ control_plane_ssh_key_path }}
+    creates: "{{ control_plane_ssh_key_path }}"
+  when: control_plane_deploy_mode == "compose"
+
+- name: Read control plane SSH public key
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ control_plane_ssh_key_path }}.pub"
+  register: control_plane_ssh_pubkey
+  when: control_plane_deploy_mode == "compose"
+
+- name: Authorize control plane SSH key on the operator user
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/home/{{ ansible_user }}/.ssh/authorized_keys"
+    line: "{{ (control_plane_ssh_pubkey.content | b64decode).strip() }}"
+    create: true
+    state: present
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  when: control_plane_deploy_mode == "compose"
+
 - name: Write control plane compose file
   become: true
   ansible.builtin.copy:
@@ -885,11 +921,18 @@
           restart: unless-stopped
           env_file:
             - "{{ control_plane_compose_env_file }}"
+          environment:
+            AUTOMATION_ANSIBLE_INVENTORY: "{{ control_plane_automation_inventory_path }}"
+            ANSIBLE_CONFIG: /app/infra/ansible/ansible.cfg
           ports:
             - "{{ control_plane_bind_address }}:{{ control_plane_api_port }}:{{ control_plane_api_port }}"
           depends_on:
             postgres:
               condition: service_healthy
+          extra_hosts:
+            - "host.docker.internal:host-gateway"
+          volumes:
+            - "{{ control_plane_host_ssh_dir }}:/root/.ssh:ro"
           command: ["pnpm", "--filter", "@eth-staking/api", "exec", "node", "dist/main.js"]
 
         web:

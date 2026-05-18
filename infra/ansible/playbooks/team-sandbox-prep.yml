@@ -1,0 +1,118 @@
+---
+# Prepares /opt/obol/<sandbox>, /var/lib/eth-treasury-operator-artifacts/<sandbox>,
+# /secure/config/<sandbox>/{cluster,host}.yml on the team server for the
+# Phase 2-1 dev sandbox. Idempotent.
+#
+# Target: same host that already runs the control-plane (team_server group).
+# Sandbox cluster name: team-sandbox-obol-a (isolated from the existing
+# obol production-style clones at /home/smartplatform/charon and
+# /home/smartplatform/obol-dkg-rehearsal).
+
+- name: Prepare team-sandbox-obol-a sandbox dirs and secure config
+  hosts: team_server
+  gather_facts: false
+  become: true
+  vars:
+    sandbox_cluster: team-sandbox-obol-a
+    sandbox_host_name: operator-sandbox-1
+    sandbox_user: "{{ ansible_user }}"
+    sandbox_deployment_path: "/opt/obol/{{ sandbox_cluster }}"
+    sandbox_artifact_source_dir: "/var/lib/eth-treasury-operator-artifacts/{{ sandbox_cluster }}"
+    sandbox_secure_config_dir: "/secure/config/{{ sandbox_cluster }}"
+    sandbox_approval_dir: /secure/approvals/active
+  tasks:
+    - name: Ensure sandbox deployment dir exists
+      ansible.builtin.file:
+        path: "{{ sandbox_deployment_path }}"
+        state: directory
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0755"
+
+    - name: Ensure sandbox artifact source dir exists
+      ansible.builtin.file:
+        path: "{{ sandbox_artifact_source_dir }}"
+        state: directory
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0755"
+
+    - name: Ensure sandbox secure config dir exists
+      ansible.builtin.file:
+        path: "{{ sandbox_secure_config_dir }}"
+        state: directory
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0750"
+
+    - name: Ensure approval dir exists
+      ansible.builtin.file:
+        path: "{{ sandbox_approval_dir }}"
+        state: directory
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0750"
+
+    - name: Write sandbox cluster.yml
+      ansible.builtin.copy:
+        dest: "{{ sandbox_secure_config_dir }}/cluster.yml"
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0640"
+        content: |
+          cluster:
+            name: {{ sandbox_cluster }}
+            network: mainnet
+            baselineVersion: v1.9.5
+            overlayProfiles: web3signer,observability
+            threshold: 3
+            operatorCount: 4
+            composeEnvSample: .env.sample.mainnet
+            signerMode: web3signer-kms
+            relayMode: obol-default
+            monitoringClusterName: {{ sandbox_cluster }}
+            serviceOwner: team-sandbox
+            web3signerUrl: http://host.docker.internal:9000
+            web3signerMetricsTarget: host.docker.internal:9000
+            web3signerFetch: true
+            web3signerFetchIntervalMs: 384000
+            feeRecipientAddress: 0x0000000000000000000000000000000000000000
+            healthSyncUrl: http://host.docker.internal:4000/v1/internal/cdvn/health-sync
+            deploymentRoot: {{ sandbox_deployment_path }}
+            approvalPolicy: rollout
+
+    - name: Write sandbox host.yml
+      ansible.builtin.copy:
+        dest: "{{ sandbox_secure_config_dir }}/host.yml"
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0640"
+        content: |
+          host:
+            name: {{ sandbox_host_name }}
+            address: 127.0.0.1
+            role: dv-operator
+            profile: baseline
+            region: team-server
+            nickname: team-sandbox-1
+            charonExternalHostname: 127.0.0.1
+            monitoringPeer: peer-sandbox-1
+            grafanaPort: 3310
+            prometheusPort: 9101
+            sshUser: {{ sandbox_user }}
+            deploymentPath: {{ sandbox_deployment_path }}
+
+    - name: Write sandbox rollout approval file
+      ansible.builtin.copy:
+        dest: "{{ sandbox_approval_dir }}/team-sandbox-rollout-approval.env"
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0640"
+        content: |
+          APPROVAL_ID=approval_team_sandbox_rollout_001
+          APPROVAL_STATUS=APPROVED
+          APPROVAL_POLICY=rollout
+          CLUSTER_NAME={{ sandbox_cluster }}
+          HOST_NAME={{ sandbox_host_name }}
+          APPROVED_BY=team-sandbox@local
+          APPROVED_AT=2026-05-18T00:00:00Z

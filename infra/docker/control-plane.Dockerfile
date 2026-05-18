@@ -9,7 +9,7 @@ ENV DATABASE_URL=postgresql://postgres:postgres@postgres:5432/eth_staking_automa
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && apt-get install -y --no-install-recommends ca-certificates openssl ansible openssh-client \
   && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable \

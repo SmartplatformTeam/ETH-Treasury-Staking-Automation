@@ -26,6 +26,7 @@ import {
 } from "./dto/create-automation-run.dto";
 
 const safeInfraOperations = new Set<AutomationOperation>([
+  AutomationOperation.VERIFY_BASELINE,
   AutomationOperation.RENDER_RUNTIME,
   AutomationOperation.VERIFY_RUNTIME,
   AutomationOperation.ROLLOUT_DRY_RUN,

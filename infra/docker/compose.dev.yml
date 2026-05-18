@@ -1,0 +1,74 @@
+name: eth-staking-dev
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eth_staking_automation
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eth_staking_automation"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    image: eth-staking-app:dev
+    build:
+      context: ../..
+      dockerfile: infra/docker/control-plane.Dockerfile
+      args:
+        API_BASE_URL: http://localhost:4000
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/eth_staking_automation?schema=public
+      API_BASE_URL: http://localhost:4000
+      APP_BASE_URL: http://localhost:3000
+      AUTH_SECRET: dev_auth_secret_minimum_32_characters_long_value
+      API_PORT: "4000"
+      AUTOMATION_ANSIBLE_INVENTORY: /app/infra/ansible/inventories/team-sandbox/hosts.yml
+      ANSIBLE_CONFIG: /app/infra/ansible/ansible.cfg
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${HOME}/.ssh:/root/.ssh:ro"
+    command: ["pnpm", "--filter", "@eth-staking/api", "exec", "node", "dist/main.js"]
+
+  web:
+    image: eth-staking-app:dev
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:4000
+      APP_BASE_URL: http://localhost:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@eth-staking/web",
+        "exec",
+        "next",
+        "start",
+        "--hostname",
+        "0.0.0.0",
+        "--port",
+        "3000",
+      ]
+
+volumes:
+  postgres-data:

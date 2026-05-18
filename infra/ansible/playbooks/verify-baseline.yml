@@ -1,0 +1,10 @@
+---
+- name: Verify pinned CDVN baseline mirror integrity
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Run verify-baseline.sh
+      ansible.builtin.command:
+        cmd: "{{ playbook_dir }}/../../obol-cdvn/scripts/verify-baseline.sh"
+      changed_when: false

@@ -15,6 +15,12 @@ import {
 
 const operationOptions = [
   { value: "BOOTSTRAP_HOST", label: "Bootstrap host", mode: "admin prepare", dryRun: false },
+  {
+    value: "VERIFY_BASELINE",
+    label: "Verify baseline mirror",
+    mode: "read-only",
+    dryRun: false,
+  },
   { value: "RENDER_RUNTIME", label: "Render runtime", mode: "dry-run", dryRun: true },
   { value: "VERIFY_RUNTIME", label: "Verify runtime", mode: "dry-run", dryRun: true },
   { value: "ROLLOUT_DRY_RUN", label: "Rollout preview", mode: "dry-run", dryRun: true },

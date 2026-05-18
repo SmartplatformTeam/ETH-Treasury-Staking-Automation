@@ -25,6 +25,9 @@ const operationConfig: Record<AutomationOperation, OperationConfig> = {
   [AutomationOperation.BOOTSTRAP_HOST]: {
     playbook: "infra/ansible/playbooks/bootstrap-host.yml",
   },
+  [AutomationOperation.VERIFY_BASELINE]: {
+    playbook: "infra/ansible/playbooks/verify-baseline.yml",
+  },
   [AutomationOperation.RENDER_RUNTIME]: {
     playbook: "infra/ansible/playbooks/render-runtime.yml",
   },
@@ -178,13 +181,25 @@ export class AutomationCommandBuilder {
 
     const repoRoot = resolveRepoRoot();
     const playbookPath = path.join(repoRoot, config.playbook);
-    const inventoryPath = resolveInventoryPath(repoRoot);
 
     if (!existsSync(playbookPath)) {
       throw new InternalServerErrorException(
         `Allowlisted playbook does not exist: ${config.playbook}`,
       );
     }
+
+    if (operation === AutomationOperation.VERIFY_BASELINE) {
+      return {
+        binary: "ansible-playbook",
+        args: ["-i", "localhost,", "--connection=local", playbookPath],
+        cwd: repoRoot,
+        playbook: config.playbook,
+        inventoryRef: "inline:localhost",
+        extraVars: {},
+      };
+    }
+
+    const inventoryPath = resolveInventoryPath(repoRoot);
 
     if (!/^[A-Za-z0-9_.:-]+$/.test(inventoryLimit)) {
       throw new BadRequestException("Inventory limit contains unsupported characters.");

@@ -43,3 +43,7 @@ control_plane_compose_env_file: "{{ control_plane_env_dir }}/compose.env"
 control_plane_compose_image_name: eth-staking-control-plane
 control_plane_compose_image_tag: latest
 control_plane_compose_web_api_base_url: "http://api:{{ control_plane_api_port }}"
+
+control_plane_host_ssh_dir: /var/lib/eth-treasury-staking-automation/ssh
+control_plane_ssh_key_path: "{{ control_plane_host_ssh_dir }}/id_ed25519"
+control_plane_automation_inventory_path: /app/infra/ansible/inventories/team-sandbox/hosts.yml
