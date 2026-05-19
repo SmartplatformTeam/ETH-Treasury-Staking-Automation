@@ -4,12 +4,8 @@ import { useActionState } from "react";
 
 import { Button, FormAlert, FormField, Textarea } from "@eth-staking/ui";
 
-import {
-  approvalActionIdleState,
-  approveApprovalAction,
-  rejectApprovalAction,
-  type ApprovalActionState
-} from "./actions";
+import { approvalActionIdleState, type ApprovalActionState } from "./action-state";
+import { approveApprovalAction, rejectApprovalAction } from "./actions";
 
 type DecisionPanelProps = {
   approvalId: string;

@@ -3,13 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { ApiError, postApiJson } from "../../lib/api-client";
-
-export type ApprovalActionState =
-  | { status: "idle" }
-  | { status: "success"; message: string; approvalId?: string }
-  | { status: "error"; message: string };
-
-const IDLE: ApprovalActionState = { status: "idle" };
+import type { ApprovalActionState } from "./action-state";
 
 function toErrorState(error: unknown, fallback: string): ApprovalActionState {
   if (error instanceof ApiError) {
@@ -113,4 +107,3 @@ export async function createApprovalAction(
   }
 }
 
-export { IDLE as approvalActionIdleState };

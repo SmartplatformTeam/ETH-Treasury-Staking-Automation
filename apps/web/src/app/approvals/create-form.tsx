@@ -6,11 +6,8 @@ import { Button, FormAlert, FormField, Select } from "@eth-staking/ui";
 
 import type { ClusterOption, HostOption } from "../../lib/inventory";
 
-import {
-  approvalActionIdleState,
-  createApprovalAction,
-  type ApprovalActionState
-} from "./actions";
+import { approvalActionIdleState, type ApprovalActionState } from "./action-state";
+import { createApprovalAction } from "./actions";
 
 type CreateFormProps = {
   canCreateRollout: boolean;
