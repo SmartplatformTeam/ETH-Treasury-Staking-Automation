@@ -131,6 +131,35 @@ function formatHeartbeat(value: string | null) {
   return value ?? "N/A";
 }
 
+export type ClusterOption = { id: string; name: string };
+export type HostOption = { id: string; name: string; clusterId: string | null };
+
+export async function loadClusterOptions(): Promise<ClusterOption[]> {
+  try {
+    const response = await fetchInventory<{ id: string; name: string }>("clusters");
+    return response.items.map((item) => ({ id: item.id, name: item.name }));
+  } catch {
+    return [];
+  }
+}
+
+export async function loadHostOptions(): Promise<HostOption[]> {
+  try {
+    const response = await fetchInventory<{
+      id: string;
+      name: string;
+      clusterId: string | null;
+    }>("hosts");
+    return response.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      clusterId: item.clusterId ?? null
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadValidatorInventory(): Promise<ValidatorInventoryResult> {
   try {
     const response = await fetchInventory<ValidatorInventoryItem>("validators");

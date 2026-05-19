@@ -41,6 +41,30 @@ export async function fetchApiJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly path: string;
+  readonly body: unknown;
+
+  constructor(status: number, path: string, body: unknown, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.body = body;
+  }
+}
+
+function extractErrorMessage(body: unknown, fallback: string) {
+  if (body && typeof body === "object" && "message" in body) {
+    const message = (body as { message: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      return message;
+    }
+  }
+  return fallback;
+}
+
 export async function postApiJson<T>(path: string, body: unknown): Promise<T> {
   const sanitizedPath = path.startsWith("/") ? path : `/${path}`;
   const headers = await getForwardedHeaders();
@@ -53,9 +77,20 @@ export async function postApiJson<T>(path: string, body: unknown): Promise<T> {
     cache: "no-store"
   });
 
-  if (!response.ok) {
-    throw new Error(`API request failed for '${sanitizedPath}' with status ${response.status}`);
+  let parsedBody: unknown = null;
+  try {
+    parsedBody = await response.json();
+  } catch {
+    parsedBody = null;
   }
 
-  return (await response.json()) as T;
+  if (!response.ok) {
+    const message = extractErrorMessage(
+      parsedBody,
+      `API request failed for '${sanitizedPath}' with status ${response.status}`
+    );
+    throw new ApiError(response.status, sanitizedPath, parsedBody, message);
+  }
+
+  return parsedBody as T;
 }

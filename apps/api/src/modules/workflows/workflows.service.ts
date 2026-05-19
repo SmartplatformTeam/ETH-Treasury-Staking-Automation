@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -9,11 +10,14 @@ import {
 import {
   ApprovalPolicyType,
   ApprovalStatus,
+  type AutomationOperation,
   DepositExecutionStatus,
   type Prisma,
   prisma
 } from "@eth-staking/db";
 import type { AuthSession } from "@eth-staking/domain";
+
+import type { CreateApprovalDto } from "./dto/create-approval.dto";
 
 function isDecidableStatus(status: ApprovalStatus) {
   return status === ApprovalStatus.REQUESTED || status === ApprovalStatus.IN_REVIEW;
@@ -138,6 +142,120 @@ export class WorkflowsService {
       total,
       items: approvals.map((approval) => toApprovalResponse(approval))
     };
+  }
+
+  async getApproval(approvalId: string) {
+    const approval = await prisma.approval.findUnique({
+      where: { id: approvalId },
+      select: approvalSelect
+    });
+
+    if (!approval) {
+      throw new NotFoundException(`Approval '${approvalId}' was not found.`);
+    }
+
+    return toApprovalResponse(approval);
+  }
+
+  async createApproval(dto: CreateApprovalDto, session: AuthSession) {
+    const actor = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    });
+
+    if (!actor) {
+      throw new UnauthorizedException("Authenticated user was not found in the directory.");
+    }
+
+    const createData = await this.resolveCreateApprovalData(dto, actor.id);
+
+    const created = await prisma.$transaction(async (tx) => {
+      const newApproval = await tx.approval.create({
+        data: createData,
+        select: approvalSelect
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionType: "APPROVAL_REQUESTED",
+          resourceType: "Approval",
+          resourceId: newApproval.id,
+          diff: {
+            policyType: newApproval.policyType,
+            resourceType: newApproval.resourceType,
+            resourceId: newApproval.resourceId,
+            clusterId: createData.clusterId ?? null,
+            hostId: createData.hostId ?? null,
+            automationOperation: createData.automationOperation ?? null,
+            depositRequestId: createData.depositRequestId ?? null
+          }
+        }
+      });
+
+      return newApproval;
+    });
+
+    return toApprovalResponse(created);
+  }
+
+  private async resolveCreateApprovalData(dto: CreateApprovalDto, actorId: string) {
+    if (dto.policyType === ApprovalPolicyType.ROLLOUT) {
+      const [cluster, host] = await Promise.all([
+        prisma.cluster.findUnique({ where: { id: dto.clusterId }, select: { id: true, name: true } }),
+        prisma.operatorHost.findUnique({
+          where: { id: dto.hostId },
+          select: { id: true, name: true, clusterId: true }
+        })
+      ]);
+
+      if (!cluster) {
+        throw new NotFoundException(`Cluster '${dto.clusterId}' was not found.`);
+      }
+
+      if (!host) {
+        throw new NotFoundException(`Operator host '${dto.hostId}' was not found.`);
+      }
+
+      if (host.clusterId !== cluster.id) {
+        throw new BadRequestException(
+          "Operator host does not belong to the specified cluster."
+        );
+      }
+
+      return {
+        resourceType: "AutomationRollout",
+        resourceId: `${cluster.name}:${host.name}:${dto.automationOperation}`,
+        policyType: ApprovalPolicyType.ROLLOUT,
+        currentStep: 1,
+        finalStatus: ApprovalStatus.REQUESTED,
+        requestedById: actorId,
+        clusterId: cluster.id,
+        hostId: host.id,
+        automationOperation: dto.automationOperation
+      } satisfies Prisma.ApprovalUncheckedCreateInput;
+    }
+
+    const depositRequest = await prisma.depositRequest.findUnique({
+      where: { id: dto.depositRequestId },
+      select: { id: true, requestNumber: true }
+    });
+
+    if (!depositRequest) {
+      throw new NotFoundException(
+        `Deposit request '${dto.depositRequestId}' was not found.`
+      );
+    }
+
+    return {
+      resourceType: "DepositRequest",
+      resourceId: depositRequest.id,
+      policyType: ApprovalPolicyType.DEPOSIT_REQUEST,
+      currentStep: 1,
+      finalStatus: ApprovalStatus.REQUESTED,
+      requestedById: actorId,
+      depositRequestId: depositRequest.id
+    } satisfies Prisma.ApprovalUncheckedCreateInput;
   }
 
   async approveApproval(approvalId: string, session: AuthSession) {

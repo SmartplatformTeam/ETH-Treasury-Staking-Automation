@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -13,11 +14,21 @@ import {
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { ApprovalPolicyType, ApprovalStatus } from "@eth-staking/db";
-import type { AuthSession } from "@eth-staking/domain";
+import type { AuthSession, UserRole } from "@eth-staking/domain";
 
 import { CurrentSession, RequirePermissions } from "../auth/auth.decorators";
+import { parseCreateApprovalDto } from "./dto/create-approval.dto";
 import { parseRejectApprovalDto } from "./dto/decide-approval.dto";
 import { WorkflowsService } from "./workflows.service";
+
+const policyCreationRoles: Record<ApprovalPolicyType, ReadonlySet<UserRole>> = {
+  ROLLOUT: new Set(["ADMIN", "INFRA_OPERATOR"]),
+  DEPOSIT_REQUEST: new Set(["ADMIN", "TREASURY_OPERATOR"]),
+  DKG_CEREMONY: new Set(["ADMIN"]),
+  SAFE_PROPOSAL: new Set(["ADMIN", "TREASURY_OPERATOR"]),
+  SIGNER_BINDING: new Set(["ADMIN", "INFRA_OPERATOR"]),
+  CHARON_ARTIFACT_STAGE: new Set(["ADMIN", "INFRA_OPERATOR"])
+};
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 300;
@@ -106,6 +117,45 @@ export class ApprovalsController {
       ...(policyType ? { policyType } : {}),
       limit: parseLimit(limitRaw)
     });
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: "Get a single approval with requester/decider context." })
+  @ApiParam({ name: "id", description: "Approval id (cuid)." })
+  getApproval(@Param("id") approvalId: string) {
+    return this.workflowsService.getApproval(approvalId);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      "Create a new approval. Currently supports policyType=ROLLOUT (INFRA_OPERATOR/ADMIN) and DEPOSIT_REQUEST (TREASURY_OPERATOR/ADMIN)."
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["policyType"],
+      properties: {
+        policyType: { type: "string", enum: ["ROLLOUT", "DEPOSIT_REQUEST"] },
+        clusterId: { type: "string" },
+        hostId: { type: "string" },
+        automationOperation: { type: "string" },
+        depositRequestId: { type: "string" }
+      }
+    }
+  })
+  createApproval(@Body() body: unknown, @CurrentSession() session: AuthSession) {
+    const dto = parseCreateApprovalDto(body);
+    const allowedRoles = policyCreationRoles[dto.policyType];
+
+    if (!allowedRoles.has(session.role)) {
+      throw new ForbiddenException(
+        `Role '${session.role}' cannot create approval with policyType '${dto.policyType}'.`
+      );
+    }
+
+    return this.workflowsService.createApproval(dto, session);
   }
 
   @Post(":id/approve")
