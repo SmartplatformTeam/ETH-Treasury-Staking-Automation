@@ -50,11 +50,89 @@ function parseBeaconValidator(data: BeaconValidatorResponseData): BeaconValidato
   };
 }
 
+export type BeaconNodeHealth =
+  | { reachable: true; status: 200 | 206 | 503; ready: boolean; syncing: boolean }
+  | { reachable: false; error: string };
+
+export type BeaconNodeSyncing = {
+  reachable: boolean;
+  headSlot: bigint | null;
+  syncDistance: bigint | null;
+  isSyncing: boolean | null;
+  isOptimistic: boolean | null;
+  isElOffline: boolean | null;
+};
+
+type BeaconSyncingResponse = {
+  data: {
+    head_slot: string;
+    sync_distance: string;
+    is_syncing: boolean;
+    is_optimistic?: boolean;
+    el_offline?: boolean;
+  };
+};
+
 export class BeaconClient {
   constructor(
     private readonly baseUrl: string,
     private readonly requestTimeoutMs = 10_000,
   ) {}
+
+  async getNodeHealth(): Promise<BeaconNodeHealth> {
+    const url = new URL("/eth/v1/node/health", this.baseUrl);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(this.requestTimeoutMs) });
+      const status = res.status as 200 | 206 | 503;
+      if (status === 200 || status === 206 || status === 503) {
+        return {
+          reachable: true,
+          status,
+          ready: status === 200,
+          syncing: status === 206,
+        };
+      }
+      return { reachable: false, error: `Unexpected status ${res.status}` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
+      return { reachable: false, error: message };
+    }
+  }
+
+  async getNodeSyncing(): Promise<BeaconNodeSyncing> {
+    const url = new URL("/eth/v1/node/syncing", this.baseUrl);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(this.requestTimeoutMs) });
+      if (!res.ok) {
+        return {
+          reachable: false,
+          headSlot: null,
+          syncDistance: null,
+          isSyncing: null,
+          isOptimistic: null,
+          isElOffline: null,
+        };
+      }
+      const json = (await res.json()) as BeaconSyncingResponse;
+      return {
+        reachable: true,
+        headSlot: BigInt(json.data.head_slot),
+        syncDistance: BigInt(json.data.sync_distance),
+        isSyncing: json.data.is_syncing,
+        isOptimistic: typeof json.data.is_optimistic === "boolean" ? json.data.is_optimistic : null,
+        isElOffline: typeof json.data.el_offline === "boolean" ? json.data.el_offline : null,
+      };
+    } catch {
+      return {
+        reachable: false,
+        headSlot: null,
+        syncDistance: null,
+        isSyncing: null,
+        isOptimistic: null,
+        isElOffline: null,
+      };
+    }
+  }
 
   async getValidator(stateId: string, validatorId: string): Promise<BeaconValidatorState | null> {
     const url = new URL(

@@ -15,11 +15,12 @@ async function bootstrap() {
     overlayProfile: env.CDVN_OVERLAY_PROFILE,
     beaconBaseUrl: env.BEACON_BASE_URL,
     beaconIntervalMs: env.BEACON_SYNC_INTERVAL_MS,
+    healthIntervalMs: env.HEALTH_SYNC_INTERVAL_MS,
   });
 
   const beaconClient = new BeaconClient(env.BEACON_BASE_URL);
 
-  const tick = async () => {
+  const beaconTick = async () => {
     try {
       const summary = await runBeaconSync({ beaconClient, logger });
       logger.info("beacon_sync_tick", summary);
@@ -30,18 +31,27 @@ async function bootstrap() {
     }
   };
 
-  await tick();
+  const healthTick = async () => {
+    try {
+      const summary = await runHealthEvaluation({ beaconClient, logger });
+      logger.info("health_evaluation_tick", summary);
+    } catch (err) {
+      logger.error("health_evaluation_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  await beaconTick();
+  await healthTick();
+
   setInterval(() => {
-    void tick();
+    void beaconTick();
   }, env.BEACON_SYNC_INTERVAL_MS);
 
-  const preview = await runHealthEvaluation({
-    clusterName: "mainnet-obol-a",
-    triggeredAt: new Date().toISOString(),
-    baselineVersion: env.CDVN_BASELINE_VERSION,
-  });
-
-  logger.info("health_evaluator_preview", preview);
+  setInterval(() => {
+    void healthTick();
+  }, env.HEALTH_SYNC_INTERVAL_MS);
 }
 
 void bootstrap();

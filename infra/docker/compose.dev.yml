@@ -52,6 +52,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/eth_staking_automation?schema=public
       BEACON_BASE_URL: http://host.docker.internal:5055
       BEACON_SYNC_INTERVAL_MS: "300000"
+      HEALTH_SYNC_INTERVAL_MS: "60000"
     depends_on:
       postgres:
         condition: service_healthy

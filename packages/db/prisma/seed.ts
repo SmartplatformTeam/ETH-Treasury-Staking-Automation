@@ -219,6 +219,24 @@ async function main() {
     }
   });
 
+  await prisma.node.upsert({
+    where: { name: "team-sandbox-obol-a/lighthouse" },
+    update: {},
+    create: {
+      name: "team-sandbox-obol-a/lighthouse",
+      role: NodeRole.CONSENSUS,
+      provider: "bare-metal",
+      region: "team-server",
+      hostName: "operator-sandbox-1",
+      clientType: "lighthouse",
+      clientVersion: "v5.x",
+      endpointMetadata: { beacon: "http://lighthouse:5052" },
+      healthStatus: HealthStatus.UNKNOWN,
+      clusterId: sandboxCluster.id,
+      hostId: sandboxHost.id
+    }
+  });
+
   const validator = await prisma.validator.upsert({
     where: { publicKey: "0x8f53b8130000000000000000000000000000000000000000000000000000000001" },
     update: {},

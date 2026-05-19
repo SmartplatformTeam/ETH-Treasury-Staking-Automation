@@ -849,6 +849,7 @@
       API_BASE_URL={{ control_plane_compose_web_api_base_url }}
       BEACON_BASE_URL={{ control_plane_beacon_base_url }}
       BEACON_SYNC_INTERVAL_MS={{ control_plane_beacon_sync_interval_ms }}
+      HEALTH_SYNC_INTERVAL_MS={{ control_plane_health_sync_interval_ms }}
   no_log: true
   when: control_plane_deploy_mode == "compose"
 

@@ -49,4 +49,5 @@ control_plane_ssh_key_path: "{{ control_plane_host_ssh_dir }}/id_ed25519"
 control_plane_automation_inventory_path: /app/infra/ansible/inventories/team-sandbox/hosts.yml
 control_plane_beacon_base_url: http://cl-lighthouse:5052
 control_plane_beacon_sync_interval_ms: 300000
+control_plane_health_sync_interval_ms: 60000
 control_plane_beacon_external_network: hoodi-node-network

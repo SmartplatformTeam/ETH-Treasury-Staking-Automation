@@ -17,6 +17,7 @@ const runtimeEnvSchema = z.object({
   OBOL_NETWORK: z.string().min(1).default("mainnet"),
   BEACON_BASE_URL: z.string().url().default("http://host.docker.internal:5055"),
   BEACON_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
+  HEALTH_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   CDVN_BASELINE_VERSION: z.string().min(1).default("v1.6.0"),
   CDVN_OVERLAY_PROFILE: z.string().min(1).default("web3signer"),
   CDVN_HEALTH_SYNC_TOKEN: z.string().min(1).default("change-me"),
