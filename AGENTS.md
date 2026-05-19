@@ -60,6 +60,22 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Phase Documentation Convention
+
+**Every phase done = three files touched.**
+
+When a phase reaches its "done" condition:
+
+1. **`docs/work-log/<date>-phase<N>-done.md`** — internal details (schema, files changed, verification scenarios, follow-ups). Already the existing pattern.
+2. **`docs/CHANGELOG.md`** — append one paragraph at the top (operator-facing summary, new endpoints/env/pages, link to done doc).
+3. **`docs/operator-runbook.md`** — update only if user-facing behavior changed (new page, new flow, new troubleshooting case, new known pattern).
+
+Skipping (1) is forbidden — work-log is the audit trail.
+Skipping (2) is forbidden — CHANGELOG is the changelog source of truth.
+Skipping (3) is allowed only if the change is purely internal (no operator/admin behavior change).
+
+Also: when fixing a recurring pattern (e.g. the NestJS DI bug, the `'use server'` export rule), add it as a numbered entry in [docs/operator-runbook.md §8](docs/operator-runbook.md#8-알려진-함정--코드-패턴) so the next contributor doesn't repeat it.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
