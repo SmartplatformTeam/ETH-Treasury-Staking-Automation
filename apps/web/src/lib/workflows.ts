@@ -24,6 +24,14 @@ type ApprovalApiItem = {
     email: string;
     name: string;
   };
+  approvedBy: {
+    email: string;
+    name: string;
+  } | null;
+  rejectedBy: {
+    email: string;
+    name: string;
+  } | null;
   depositRequest: {
     requestNumber: string;
   } | null;
@@ -99,7 +107,8 @@ export async function loadApprovals(): Promise<ApprovalsResult> {
       resource: item.depositRequest?.requestNumber ?? `${item.resourceType}:${item.resourceId}`,
       policy: item.policyType,
       status: item.finalStatus,
-      requestedBy: item.requestedBy.email
+      requestedBy: item.requestedBy.email,
+      decidedBy: item.approvedBy?.email ?? item.rejectedBy?.email ?? "—"
     }));
 
     return {

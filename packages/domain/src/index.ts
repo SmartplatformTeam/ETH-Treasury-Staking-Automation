@@ -59,6 +59,7 @@ export type ApprovalRow = {
   policy: string;
   status: string;
   requestedBy: string;
+  decidedBy: string;
 };
 
 export type RewardRow = {
@@ -257,13 +258,15 @@ export const approvalRows: ApprovalRow[] = [
     resource: "deposit-request-2026-04-14-01",
     policy: "DEPOSIT_REQUEST",
     status: "REQUESTED",
-    requestedBy: "infra.operator@treasury.example"
+    requestedBy: "infra.operator@treasury.example",
+    decidedBy: "—"
   },
   {
     resource: "cluster-rollout-mainnet-obol-a",
     policy: "ROLLOUT",
     status: "IN_REVIEW",
-    requestedBy: "release.bot@treasury.example"
+    requestedBy: "release.bot@treasury.example",
+    decidedBy: "—"
   }
 ];
 

@@ -28,7 +28,8 @@ export default async function ApprovalsPage() {
                 <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
               )
             },
-            { key: "requestedBy", header: "Requested By" }
+            { key: "requestedBy", header: "Requested By" },
+            { key: "decidedBy", header: "Decided By" }
           ]}
           rows={approvals.rows}
         />

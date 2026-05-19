@@ -1,9 +1,21 @@
-import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
-import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query
+} from "@nestjs/common";
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { ApprovalPolicyType, ApprovalStatus } from "@eth-staking/db";
+import type { AuthSession } from "@eth-staking/domain";
 
-import { RequirePermissions } from "../auth/auth.decorators";
+import { CurrentSession, RequirePermissions } from "../auth/auth.decorators";
+import { parseRejectApprovalDto } from "./dto/decide-approval.dto";
 import { WorkflowsService } from "./workflows.service";
 
 const DEFAULT_LIMIT = 100;
@@ -91,5 +103,46 @@ export class ApprovalsController {
       ...(policyType ? { policyType } : {}),
       limit: parseLimit(limitRaw)
     });
+  }
+
+  @Post(":id/approve")
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions("approvals:decide")
+  @ApiOperation({
+    summary:
+      "Approve a pending approval. Requires APPROVER or ADMIN role. Requester cannot self-approve."
+  })
+  @ApiParam({ name: "id", description: "Approval id (cuid)." })
+  approveApproval(@Param("id") approvalId: string, @CurrentSession() session: AuthSession) {
+    return this.workflowsService.approveApproval(approvalId, session);
+  }
+
+  @Post(":id/reject")
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions("approvals:decide")
+  @ApiOperation({
+    summary:
+      "Reject a pending approval with a required reason. Requires APPROVER or ADMIN role. Requester cannot self-reject."
+  })
+  @ApiParam({ name: "id", description: "Approval id (cuid)." })
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["reason"],
+      properties: {
+        reason: {
+          type: "string",
+          description: "Non-empty reason recorded in audit log."
+        }
+      }
+    }
+  })
+  rejectApproval(
+    @Param("id") approvalId: string,
+    @Body() body: unknown,
+    @CurrentSession() session: AuthSession
+  ) {
+    const dto = parseRejectApprovalDto(body);
+    return this.workflowsService.rejectApproval(approvalId, session, dto.reason);
   }
 }

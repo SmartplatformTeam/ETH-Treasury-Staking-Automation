@@ -1,6 +1,7 @@
 import {
   ApprovalPolicyType,
   ApprovalStatus,
+  AutomationOperation,
   ClusterType,
   DepositExecutionStatus,
   DepositValidationStatus,
@@ -129,7 +130,7 @@ async function main() {
     }
   });
 
-  await prisma.operatorHost.upsert({
+  const sandboxHost = await prisma.operatorHost.upsert({
     where: { name: "operator-sandbox-1" },
     update: {},
     create: {
@@ -313,6 +314,29 @@ async function main() {
       finalStatus: ApprovalStatus.IN_REVIEW,
       requestedById: operator.id,
       depositRequestId: depositRequest.id
+    }
+  });
+
+  await prisma.approval.deleteMany({
+    where: {
+      clusterId: sandboxCluster.id,
+      hostId: sandboxHost.id,
+      policyType: ApprovalPolicyType.ROLLOUT,
+      automationOperation: AutomationOperation.ROLLOUT_EXECUTE
+    }
+  });
+
+  await prisma.approval.create({
+    data: {
+      resourceType: "AutomationRollout",
+      resourceId: `${sandboxCluster.name}:${sandboxHost.name}:ROLLOUT_EXECUTE`,
+      policyType: ApprovalPolicyType.ROLLOUT,
+      currentStep: 1,
+      finalStatus: ApprovalStatus.REQUESTED,
+      requestedById: operator.id,
+      clusterId: sandboxCluster.id,
+      hostId: sandboxHost.id,
+      automationOperation: AutomationOperation.ROLLOUT_EXECUTE
     }
   });
 
