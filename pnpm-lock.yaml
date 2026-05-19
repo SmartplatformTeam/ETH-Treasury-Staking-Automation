@@ -99,6 +99,9 @@ importers:
       '@eth-staking/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@eth-staking/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@eth-staking/observability':
         specifier: workspace:*
         version: link:../../packages/observability

@@ -22,6 +22,11 @@ export type ValidatorRow = {
   strategy: string;
   cluster: string;
   ownerEntity: string;
+  validatorIndex: string;
+  beaconStatus: string;
+  balanceEth: string;
+  effectiveBalanceEth: string;
+  lastSyncedAt: string;
 };
 
 export type NodeRow = {
@@ -153,21 +158,36 @@ export const validatorRows: ValidatorRow[] = [
     status: "ACTIVE",
     strategy: "DVT",
     cluster: "mainnet-obol-a",
-    ownerEntity: "Treasury Alpha"
+    ownerEntity: "Treasury Alpha",
+    validatorIndex: "—",
+    beaconStatus: "—",
+    balanceEth: "—",
+    effectiveBalanceEth: "—",
+    lastSyncedAt: "—"
   },
   {
     publicKey: "0x3ac2...01af",
     status: "PENDING_DEPOSIT",
     strategy: "DVT",
     cluster: "mainnet-obol-b",
-    ownerEntity: "Treasury Alpha"
+    ownerEntity: "Treasury Alpha",
+    validatorIndex: "—",
+    beaconStatus: "—",
+    balanceEth: "—",
+    effectiveBalanceEth: "—",
+    lastSyncedAt: "—"
   },
   {
     publicKey: "0x76b1...92fd",
     status: "ACTIVE",
     strategy: "RESTAKING",
     cluster: "mainnet-obol-a",
-    ownerEntity: "Treasury Beta"
+    ownerEntity: "Treasury Beta",
+    validatorIndex: "—",
+    beaconStatus: "—",
+    balanceEth: "—",
+    effectiveBalanceEth: "—",
+    lastSyncedAt: "—"
   }
 ];
 

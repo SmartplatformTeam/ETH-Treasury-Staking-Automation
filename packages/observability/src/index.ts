@@ -26,3 +26,5 @@ export function createLogger(context: LoggerContext) {
     error: (message: string, payload?: LogPayload) => emit("error", message, payload)
   };
 }
+
+export type Logger = ReturnType<typeof createLogger>;

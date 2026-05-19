@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@eth-staking/config": "workspace:*",
+    "@eth-staking/db": "workspace:*",
     "@eth-staking/observability": "workspace:*"
   }
 }

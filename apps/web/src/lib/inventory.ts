@@ -25,7 +25,25 @@ type ValidatorInventoryItem = {
   strategyType: string;
   ownerEntity: string;
   clusterName: string | null;
+  validatorIndex: number | null;
+  beaconStatus: string | null;
+  balanceGwei: string | null;
+  effectiveBalanceGwei: string | null;
+  lastBeaconSyncAt: string | null;
 };
+
+function gweiStringToEthDisplay(gwei: string | null): string | null {
+  if (!gwei) return null;
+  try {
+    const wei = BigInt(gwei);
+    const integer = wei / 1_000_000_000n;
+    const fractional = wei % 1_000_000_000n;
+    const fractionalStr = fractional.toString().padStart(9, "0").slice(0, 4);
+    return `${integer.toString()}.${fractionalStr}`;
+  } catch {
+    return null;
+  }
+}
 
 type NodeInventoryItem = {
   name: string;
@@ -121,7 +139,14 @@ export async function loadValidatorInventory(): Promise<ValidatorInventoryResult
       status: item.status,
       strategy: item.strategyType,
       cluster: item.clusterName ?? "unbound",
-      ownerEntity: item.ownerEntity
+      ownerEntity: item.ownerEntity,
+      validatorIndex: item.validatorIndex !== null ? item.validatorIndex.toString() : "—",
+      beaconStatus: item.beaconStatus ?? "—",
+      balanceEth: gweiStringToEthDisplay(item.balanceGwei) ?? "—",
+      effectiveBalanceEth: gweiStringToEthDisplay(item.effectiveBalanceGwei) ?? "—",
+      lastSyncedAt: item.lastBeaconSyncAt
+        ? new Date(item.lastBeaconSyncAt).toLocaleString()
+        : "—"
     }));
 
     return {

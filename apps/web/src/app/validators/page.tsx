@@ -1,4 +1,4 @@
-import { DataTable, Panel, StatusBadge } from "@eth-staking/ui";
+import { CopyableAddress, DataTable, Panel, StatusBadge } from "@eth-staking/ui";
 
 import { OpsShell } from "../../components/ops-shell";
 import { statusToneFromLabel } from "../../components/status-tone";
@@ -19,17 +19,28 @@ export default async function ValidatorsPage() {
       >
         <DataTable
           columns={[
-            { key: "publicKey", header: "Public Key" },
+            {
+              key: "publicKey",
+              header: "Public Key",
+              width: "200px",
+              render: (row) => <CopyableAddress value={row.publicKey} />
+            },
             {
               key: "status",
               header: "Status",
+              width: "120px",
               render: (row) => (
                 <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
               )
             },
-            { key: "strategy", header: "Strategy" },
+            { key: "validatorIndex", header: "Index", width: "80px" },
+            { key: "beaconStatus", header: "Beacon Status", width: "140px" },
+            { key: "balanceEth", header: "Balance (ETH)", width: "120px" },
+            { key: "effectiveBalanceEth", header: "Effective (ETH)", width: "120px" },
+            { key: "strategy", header: "Strategy", width: "100px" },
             { key: "cluster", header: "Cluster" },
-            { key: "ownerEntity", header: "Owner" }
+            { key: "ownerEntity", header: "Owner" },
+            { key: "lastSyncedAt", header: "Synced", width: "180px" }
           ]}
           rows={inventory.rows}
         />

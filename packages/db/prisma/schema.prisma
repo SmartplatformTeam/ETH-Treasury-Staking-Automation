@@ -263,12 +263,37 @@ model Validator {
   clusterId        String?
   signerId         String?
   activeNodeId     String?
+  beaconStatus              String?
+  balanceGwei               BigInt?
+  effectiveBalanceGwei      BigInt?
+  activationEligibilityEpoch BigInt?
+  activationEpoch           BigInt?
+  exitEpoch                 BigInt?
+  withdrawableEpoch         BigInt?
+  withdrawalCredentials     String?
+  slashed                   Boolean?
+  lastBeaconSyncAt          DateTime?
   cluster          Cluster?        @relation(fields: [clusterId], references: [id])
   signer           Signer?         @relation(fields: [signerId], references: [id])
   activeNode       Node?           @relation("validator_active_node", fields: [activeNodeId], references: [id])
   rewardLedgers    RewardLedger[]
+  beaconSnapshots  ValidatorBalanceSnapshot[]
   createdAt        DateTime        @default(now())
   archivedAt       DateTime?
+}
+
+model ValidatorBalanceSnapshot {
+  id                   String    @id @default(cuid())
+  validatorId          String
+  validator            Validator @relation(fields: [validatorId], references: [id], onDelete: Cascade)
+  beaconStatus         String
+  balanceGwei          BigInt
+  effectiveBalanceGwei BigInt
+  slot                 BigInt?
+  epoch                BigInt?
+  capturedAt           DateTime  @default(now())
+
+  @@index([validatorId, capturedAt])
 }
 
 model TreasuryAccount {

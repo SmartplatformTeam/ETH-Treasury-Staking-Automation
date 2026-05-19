@@ -62,7 +62,7 @@
         content: |
           cluster:
             name: {{ sandbox_cluster }}
-            network: mainnet
+            network: hoodi
             baselineVersion: v1.9.5
             overlayProfiles: web3signer,observability
             threshold: 3

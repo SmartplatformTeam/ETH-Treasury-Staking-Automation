@@ -1,5 +1,5 @@
 import { type MetricCard } from "@eth-staking/domain";
-import { DataTable, MetricStrip, Panel, StatusBadge } from "@eth-staking/ui";
+import { CopyableAddress, DataTable, MetricStrip, Panel, StatusBadge } from "@eth-staking/ui";
 
 import { OpsShell } from "../components/ops-shell";
 import { statusToneFromLabel } from "../components/status-tone";
@@ -56,22 +56,28 @@ export default async function DashboardPage() {
       description="Baseline fleet health, approval load, and DVT rollout posture across the four-host operator topology."
     >
       <MetricStrip items={metrics} />
-      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+      <div className="flex flex-col gap-6">
         <Panel
           title="Validator Fleet"
           description="Inventory is separated from risky actions. Deposit and signer operations continue through approval flow."
         >
           <DataTable
             columns={[
-              { key: "publicKey", header: "Public Key" },
+              {
+                key: "publicKey",
+                header: "Public Key",
+                width: "150px",
+                render: (row) => <CopyableAddress value={row.publicKey} />
+              },
               {
                 key: "status",
                 header: "Status",
+                width: "120px",
                 render: (row) => (
                   <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
                 )
               },
-              { key: "strategy", header: "Strategy" },
+              { key: "strategy", header: "Strategy", width: "80px" },
               { key: "cluster", header: "Cluster" },
               { key: "ownerEntity", header: "Owner" }
             ]}
@@ -85,10 +91,11 @@ export default async function DashboardPage() {
           <DataTable
             columns={[
               { key: "resource", header: "Resource" },
-              { key: "policy", header: "Policy" },
+              { key: "policy", header: "Policy", width: "160px" },
               {
                 key: "status",
                 header: "Status",
+                width: "120px",
                 render: (row) => (
                   <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
                 )
@@ -99,7 +106,7 @@ export default async function DashboardPage() {
           />
         </Panel>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <Panel
           title="CDVN Cluster Baseline"
           description="Pinned baseline plus overlay versioning stays visible so rollout drift can be audited."
@@ -107,12 +114,13 @@ export default async function DashboardPage() {
           <DataTable
             columns={[
               { key: "name", header: "Cluster" },
-              { key: "baselineVersion", header: "Baseline" },
+              { key: "baselineVersion", header: "Baseline", width: "110px" },
               { key: "overlayVersion", header: "Overlay" },
-              { key: "threshold", header: "Threshold" },
+              { key: "threshold", header: "Threshold", width: "80px" },
               {
                 key: "status",
                 header: "Status",
+                width: "120px",
                 render: (row) => (
                   <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
                 )
@@ -127,16 +135,17 @@ export default async function DashboardPage() {
         >
           <DataTable
             columns={[
-              { key: "source", header: "Source" },
+              { key: "source", header: "Source", width: "160px" },
               {
                 key: "severity",
                 header: "Severity",
+                width: "120px",
                 render: (row) => (
                   <StatusBadge tone={statusToneFromLabel(row.severity)}>{row.severity}</StatusBadge>
                 )
               },
               { key: "summary", header: "Summary" },
-              { key: "acknowledged", header: "Acked" }
+              { key: "acknowledged", header: "Acked", width: "80px" }
             ]}
             rows={alertInventory.rows}
           />
@@ -149,17 +158,18 @@ export default async function DashboardPage() {
         <DataTable
           columns={[
             { key: "name", header: "Node" },
-            { key: "role", header: "Role" },
+            { key: "role", header: "Role", width: "120px" },
             { key: "client", header: "Client" },
-            { key: "region", header: "Region" },
+            { key: "region", header: "Region", width: "160px" },
             {
               key: "status",
               header: "Status",
+              width: "120px",
               render: (row) => (
                 <StatusBadge tone={statusToneFromLabel(row.status)}>{row.status}</StatusBadge>
               )
             },
-            { key: "lastHeartbeat", header: "Last Heartbeat" }
+            { key: "lastHeartbeat", header: "Last Heartbeat", width: "220px" }
           ]}
           rows={nodeInventory.rows}
         />

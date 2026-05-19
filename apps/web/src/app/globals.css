@@ -1,28 +1,50 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
-  --miro-primary: #050038;
-  --miro-on-primary: #ffffff;
-  --miro-canvas: #ffffff;
-  --miro-surface: #f7f7f2;
-  --miro-surface-soft: #fbfbf7;
-  --miro-hairline: #e7e4d8;
-  --miro-hairline-strong: #cbc7b8;
-  --miro-yellow: #ffd02f;
-  --miro-on-yellow: #050038;
-  --miro-yellow-soft: #fff4b8;
-  --miro-blue: #4262ff;
+  color-scheme: dark;
+
+  /* === BMW M canvas + ink === */
+  --miro-canvas: #000000;
+  --miro-surface: #1a1a1a;
+  --miro-surface-soft: #0d0d0d;
+  --miro-surface-elevated: #262626;
+  --miro-carbon-gray: #2b2b2b;
+
+  /* === Hairlines === */
+  --miro-hairline: #4a4a4a;
+  --miro-hairline-strong: #3c3c3c;
+
+  /* === Ink / type === */
+  --miro-primary: #ffffff;
+  --miro-on-primary: #000000;
+  --miro-ink: #ffffff;
+  --miro-charcoal: #e6e6e6;
+  --miro-slate: #bbbbbb;
+  --miro-muted: #7e7e7e;
+
+  /* === M tricolor + brand blues === */
+  --miro-m-blue-light: #0066b1;
+  --miro-m-blue-dark: #1c69d4;
+  --miro-m-red: #e22718;
+  --miro-blue: #1c69d4;
   --miro-on-blue: #ffffff;
-  --miro-coral-soft: #ffd7c2;
-  --miro-rose-soft: #ffe1ec;
-  --miro-teal-soft: #c9f4ef;
-  --miro-mint-soft: #dcf7d5;
-  --miro-ink: #050038;
-  --miro-charcoal: #2d294f;
-  --miro-slate: #6b6684;
-  --miro-muted: #9a9587;
-  font-family: "Roobert PRO", "Noto Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --miro-electric-blue: #0653b6;
+
+  /* === Yellow / warning === */
+  --miro-yellow: #f4b400;
+  --miro-on-yellow: #000000;
+  --miro-yellow-soft: #1a1a1a;
+
+  /* === Semantic tone surfaces (chip backgrounds on dark canvas) === */
+  --miro-teal-soft: #0d2622;
+  --miro-mint-soft: #0d2210;
+  --miro-rose-soft: #2a1018;
+  --miro-coral-soft: #2a1810;
+  --miro-success: #0fa336;
+
+  font-family: var(--miro-font-family);
+  font-weight: 300;
+  letter-spacing: 0;
 }
 
 * {
@@ -38,6 +60,7 @@ body {
 body {
   background: var(--miro-canvas);
   color: var(--miro-ink);
+  font-weight: 300;
 }
 
 a {
@@ -47,4 +70,30 @@ a {
 
 table {
   border-collapse: collapse;
+}
+
+/* Headings inherit color/transform/weight from their component className
+   (we drive these explicitly with Tailwind utilities — no global reset). */
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-weight: inherit;
+}
+
+/* === Decorative M tricolor 4px divider === */
+.m-stripe-divider {
+  height: 4px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--miro-m-blue-light) 0%,
+    var(--miro-m-blue-light) 33.33%,
+    var(--miro-m-blue-dark) 33.33%,
+    var(--miro-m-blue-dark) 66.66%,
+    var(--miro-m-red) 66.66%,
+    var(--miro-m-red) 100%
+  );
 }

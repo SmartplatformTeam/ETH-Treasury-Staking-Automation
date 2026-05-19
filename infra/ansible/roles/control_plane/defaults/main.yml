@@ -47,3 +47,6 @@ control_plane_compose_web_api_base_url: "http://api:{{ control_plane_api_port }}
 control_plane_host_ssh_dir: /var/lib/eth-treasury-staking-automation/ssh
 control_plane_ssh_key_path: "{{ control_plane_host_ssh_dir }}/id_ed25519"
 control_plane_automation_inventory_path: /app/infra/ansible/inventories/team-sandbox/hosts.yml
+control_plane_beacon_base_url: http://cl-lighthouse:5052
+control_plane_beacon_sync_interval_ms: 300000
+control_plane_beacon_external_network: hoodi-node-network

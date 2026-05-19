@@ -52,12 +52,14 @@ const executeOperations = new Set([
   "FULL_OPERATOR_MVP",
 ]);
 
-const fieldLabelClass = "grid min-w-0 gap-2 text-sm text-[var(--miro-charcoal)]";
-const fieldCaptionClass = "text-xs uppercase text-[var(--miro-slate)]";
+const fieldLabelClass = "grid min-w-0 gap-2 text-sm font-light text-[var(--miro-charcoal)]";
+const fieldCaptionClass =
+  "text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--miro-slate)]";
 const fieldControlClass =
-  "min-h-11 w-full min-w-0 rounded-xl border border-[var(--miro-hairline-strong)] bg-white px-4 py-3 text-sm text-[var(--miro-primary)] outline-none transition focus:border-[var(--miro-blue)] disabled:bg-[var(--miro-surface)] disabled:text-[var(--miro-muted)]";
-const detailLabelClass = "text-xs uppercase text-[var(--miro-slate)]";
-const detailValueClass = "mt-1 block truncate text-[var(--miro-primary)]";
+  "min-h-12 w-full min-w-0 rounded-none border border-[var(--miro-hairline)] bg-[var(--miro-surface)] px-4 py-3 text-sm font-light text-[var(--miro-ink)] outline-none transition focus:border-[var(--miro-ink)] disabled:bg-[var(--miro-surface-soft)] disabled:text-[var(--miro-muted)]";
+const detailLabelClass =
+  "text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--miro-slate)]";
+const detailValueClass = "mt-1 block truncate text-[var(--miro-ink)]";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -189,11 +191,11 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
           </label>
 
           <div className="flex flex-col justify-end gap-3">
-            <label className="flex items-start gap-3 rounded-xl border border-[#f1d85c] bg-[var(--miro-yellow-soft)] px-4 py-3 text-sm leading-6 text-[var(--miro-charcoal)]">
+            <label className="flex items-start gap-3 border border-[var(--miro-yellow)] bg-[var(--miro-surface)] px-4 py-3 text-sm font-light leading-6 text-[var(--miro-charcoal)]">
               <input
                 name="executeConfirmed"
                 type="checkbox"
-                className="mt-1 accent-[var(--miro-primary)]"
+                className="mt-1 accent-[var(--miro-yellow)]"
               />
               <span>
                 Execute operations require an approved backend approval record. Operator-specific
@@ -203,7 +205,7 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
             <button
               type="submit"
               disabled={!canStart}
-              className="min-h-11 rounded-xl bg-[var(--miro-primary)] px-6 py-3 text-sm font-medium text-[var(--miro-on-primary)] transition hover:bg-[var(--miro-charcoal)] disabled:bg-[var(--miro-hairline)] disabled:text-[var(--miro-muted)]"
+              className="min-h-12 border border-[var(--miro-ink)] bg-transparent px-8 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--miro-ink)] transition hover:bg-[var(--miro-ink)] hover:text-[var(--miro-on-primary)] disabled:border-[var(--miro-hairline)] disabled:bg-transparent disabled:text-[var(--miro-muted)]"
             >
               Run
             </button>
@@ -223,12 +225,12 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
         </div>
 
         {options.unavailable ? (
-          <p className="mt-4 rounded-xl border border-[#f1d85c] bg-[var(--miro-yellow-soft)] px-4 py-3 text-sm text-[#5b4b00]">
+          <p className="mt-4 border border-[var(--miro-yellow)] bg-[var(--miro-surface)] px-4 py-3 text-sm font-light text-[var(--miro-yellow)]">
             Inventory API is unavailable, so automation cannot be started from this page.
           </p>
         ) : null}
         {error ? (
-          <p className="mt-4 rounded-xl border border-[#ffb294] bg-[var(--miro-coral-soft)] px-4 py-3 text-sm text-[#7c260c]">
+          <p className="mt-4 border border-[var(--miro-m-red)] bg-[var(--miro-coral-soft)] px-4 py-3 text-sm font-light text-[#ff8a72]">
             {error === "approval_required"
               ? "Execute operation was not started because approval ID and confirmation are required."
               : error === "missing_target"
@@ -238,7 +240,7 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
         ) : null}
       </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="flex flex-col gap-6">
         <Panel
           title="Recent Runs"
           description="Latest AutomationRun records persisted by the backend."
@@ -253,11 +255,11 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
                 <Link
                   key={run.runId}
                   href={`/automation?runId=${run.runId}`}
-                  className="block rounded-xl border border-[var(--miro-hairline)] bg-[var(--miro-surface-soft)] p-4 transition hover:border-[var(--miro-blue)]"
+                  className="block border border-[var(--miro-hairline)] bg-[var(--miro-surface)] p-4 transition hover:border-[var(--miro-ink)]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <p
-                      className="min-w-0 truncate text-sm font-semibold text-[var(--miro-primary)]"
+                      className="min-w-0 truncate text-xs font-bold uppercase tracking-[0.08em] text-[var(--miro-ink)]"
                       title={run.operation}
                     >
                       {run.operation}
@@ -265,7 +267,7 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
                     <StatusBadge tone={statusTone(run.status)}>{run.status}</StatusBadge>
                   </div>
                   <p
-                    className="mt-2 truncate text-xs leading-5 text-[var(--miro-slate)]"
+                    className="mt-2 truncate text-xs font-light leading-5 text-[var(--miro-slate)]"
                     title={`${run.runId} / ${run.dryRun ? "dry-run" : "execute"} / ${new Date(run.createdAt).toLocaleString()}`}
                   >
                     {run.runId} / {run.dryRun ? "dry-run" : "execute"} /{" "}
@@ -310,36 +312,36 @@ export default async function AutomationPage(props: { searchParams?: SearchParam
                 </div>
               </div>
               {selectedRun.failureReason ? (
-                <p className="rounded-xl border border-[#ffb294] bg-[var(--miro-coral-soft)] px-4 py-3 text-sm text-[#7c260c]">
+                <p className="border border-[var(--miro-m-red)] bg-[var(--miro-coral-soft)] px-4 py-3 text-sm font-light text-[#ff8a72]">
                   {selectedRun.failureReason}
                 </p>
               ) : null}
-              <div className="overflow-hidden rounded-xl border border-[var(--miro-hairline)]">
+              <div className="border border-[var(--miro-hairline)]">
                 <div className="flex items-center justify-between border-b border-[var(--miro-hairline)] bg-[var(--miro-surface)] px-4 py-3">
                   <StatusBadge tone={statusTone(selectedRun.status)}>
                     {selectedRun.status}
                   </StatusBadge>
                   <Link
                     href={`/automation?runId=${selectedRun.runId}`}
-                    className="rounded-lg border border-[var(--miro-hairline-strong)] bg-white px-3 py-1 text-sm text-[var(--miro-blue)]"
+                    className="border border-[var(--miro-hairline)] bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--miro-ink)] hover:border-[var(--miro-ink)]"
                   >
                     Refresh
                   </Link>
                 </div>
-                <div className="max-h-[560px] space-y-3 overflow-auto bg-[var(--miro-primary)] p-4">
+                <div className="max-h-[560px] space-y-3 overflow-auto bg-[var(--miro-surface-soft)] p-4">
                   {selectedRun.events?.length ? (
                     selectedRun.events.map((event) => (
                       <article
                         key={event.id}
-                        className="rounded-lg border border-white/10 bg-white/10 p-3"
+                        className="border border-[var(--miro-hairline)] bg-[var(--miro-surface)] p-3"
                       >
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-[var(--miro-on-primary)] opacity-60">
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--miro-slate)]">
                           <span>
                             #{event.sequence} {event.stream}
                           </span>
                           <span>{event.redacted ? "redacted" : "clean"}</span>
                         </div>
-                        <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--miro-on-primary)]">
+                        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-[var(--miro-ink)]">
                           {event.message}
                         </pre>
                       </article>

@@ -113,11 +113,11 @@ async function main() {
 
   const sandboxCluster = await prisma.cluster.upsert({
     where: { name: "team-sandbox-obol-a" },
-    update: {},
+    update: { network: Network.HOODI },
     create: {
       name: "team-sandbox-obol-a",
       type: ClusterType.OBOL_DVT,
-      network: Network.MAINNET,
+      network: Network.HOODI,
       baselineVersion: "CDVN v1.9.5",
       overlayVersion: "web3signer@2026-05-18",
       obolClusterId: "obol-team-sandbox-a",
@@ -140,6 +140,46 @@ async function main() {
       baselineVersion: sandboxCluster.baselineVersion,
       overlayVersion: sandboxCluster.overlayVersion,
       healthStatus: HealthStatus.UNKNOWN,
+      clusterId: sandboxCluster.id
+    }
+  });
+
+  await prisma.validator.upsert({
+    where: {
+      publicKey:
+        "0x90d1d0c93cc8c799c6f90d7f3742b7c565b7e61a379fedf05d4fa2ed91a70b542135f69b8b3eece641975b35891550a5"
+    },
+    update: {},
+    create: {
+      publicKey:
+        "0x90d1d0c93cc8c799c6f90d7f3742b7c565b7e61a379fedf05d4fa2ed91a70b542135f69b8b3eece641975b35891550a5",
+      network: Network.HOODI,
+      status: ValidatorStatus.WITHDRAWN,
+      strategyType: StrategyType.DVT,
+      ownerEntity: "Team Sandbox",
+      feeRecipient: "0x0000000000000000000000000000000000000000",
+      withdrawalTarget: "0xf9d69b980fae269e61255d42fac54fae98cce214",
+      signerType: "web3signer",
+      clusterId: sandboxCluster.id
+    }
+  });
+
+  await prisma.validator.upsert({
+    where: {
+      publicKey:
+        "0x8f80f16f1783869c854f81c77fcd7a2a86cebc6a1ab3c5167d8ec7d18e0752612a5a2a96125e05681c0c68537571bfac"
+    },
+    update: {},
+    create: {
+      publicKey:
+        "0x8f80f16f1783869c854f81c77fcd7a2a86cebc6a1ab3c5167d8ec7d18e0752612a5a2a96125e05681c0c68537571bfac",
+      network: Network.HOODI,
+      status: ValidatorStatus.ACTIVE,
+      strategyType: StrategyType.DVT,
+      ownerEntity: "Team Sandbox",
+      feeRecipient: "0xd510880298982506d8a25a0a1d3777a32c9f9af4",
+      withdrawalTarget: "0x968ad0f4bccd706494d9e0480fc9de764b93e655",
+      signerType: "web3signer",
       clusterId: sandboxCluster.id
     }
   });

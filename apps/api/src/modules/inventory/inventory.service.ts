@@ -54,6 +54,24 @@ export class InventoryService {
         clusterName: validator.cluster?.name ?? null,
         signer: validator.signer,
         activeNode: validator.activeNode,
+        beaconStatus: validator.beaconStatus,
+        balanceGwei: validator.balanceGwei !== null ? validator.balanceGwei.toString() : null,
+        effectiveBalanceGwei:
+          validator.effectiveBalanceGwei !== null
+            ? validator.effectiveBalanceGwei.toString()
+            : null,
+        activationEligibilityEpoch:
+          validator.activationEligibilityEpoch !== null
+            ? validator.activationEligibilityEpoch.toString()
+            : null,
+        activationEpoch:
+          validator.activationEpoch !== null ? validator.activationEpoch.toString() : null,
+        exitEpoch: validator.exitEpoch !== null ? validator.exitEpoch.toString() : null,
+        withdrawableEpoch:
+          validator.withdrawableEpoch !== null ? validator.withdrawableEpoch.toString() : null,
+        withdrawalCredentials: validator.withdrawalCredentials,
+        slashed: validator.slashed,
+        lastBeaconSyncAt: validator.lastBeaconSyncAt,
         createdAt: validator.createdAt,
         archivedAt: validator.archivedAt
       }))

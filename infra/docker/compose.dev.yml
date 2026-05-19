@@ -45,6 +45,28 @@ services:
       - "${HOME}/.ssh:/root/.ssh:ro"
     command: ["pnpm", "--filter", "@eth-staking/api", "exec", "node", "dist/main.js"]
 
+  worker:
+    image: eth-staking-app:dev
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/eth_staking_automation?schema=public
+      BEACON_BASE_URL: http://host.docker.internal:5055
+      BEACON_SYNC_INTERVAL_MS: "300000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@eth-staking/worker",
+        "exec",
+        "node",
+        "dist/index.js",
+      ]
+
   web:
     image: eth-staking-app:dev
     restart: unless-stopped
