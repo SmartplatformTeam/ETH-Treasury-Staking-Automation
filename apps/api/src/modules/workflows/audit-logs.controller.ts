@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Inject, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { RequirePermissions } from "../auth/auth.decorators";
@@ -25,7 +25,9 @@ function parseLimit(rawValue?: string) {
 @Controller("audit-logs")
 @RequirePermissions("audit:read")
 export class AuditLogsController {
-  constructor(private readonly workflowsService: WorkflowsService) {}
+  constructor(
+    @Inject(WorkflowsService) private readonly workflowsService: WorkflowsService
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List audit log events with actor and resource context." })

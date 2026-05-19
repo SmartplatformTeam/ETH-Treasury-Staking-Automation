@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Inject, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { ApprovalStatus, DepositExecutionStatus } from "@eth-staking/db";
@@ -59,7 +59,9 @@ function parseLimit(rawValue?: string) {
 @Controller("deposits")
 @RequirePermissions("deposits:read")
 export class DepositsController {
-  constructor(private readonly workflowsService: WorkflowsService) {}
+  constructor(
+    @Inject(WorkflowsService) private readonly workflowsService: WorkflowsService
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List deposit requests and linked approval/export state." })

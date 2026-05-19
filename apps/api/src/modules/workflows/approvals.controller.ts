@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Query
@@ -71,7 +72,9 @@ function parseLimit(rawValue?: string) {
 @Controller("approvals")
 @RequirePermissions("approvals:read")
 export class ApprovalsController {
-  constructor(private readonly workflowsService: WorkflowsService) {}
+  constructor(
+    @Inject(WorkflowsService) private readonly workflowsService: WorkflowsService
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List approval workflow entries for risky operations." })
