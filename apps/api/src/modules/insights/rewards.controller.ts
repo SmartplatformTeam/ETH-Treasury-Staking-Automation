@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Inject, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 
 import { RequirePermissions } from "../auth/auth.decorators";
@@ -25,7 +25,9 @@ function parseLimit(rawValue?: string) {
 @Controller("rewards")
 @RequirePermissions("rewards:read")
 export class RewardsController {
-  constructor(private readonly insightsService: InsightsService) {}
+  constructor(
+    @Inject(InsightsService) private readonly insightsService: InsightsService
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List reward ledger summaries grouped by period and strategy." })
