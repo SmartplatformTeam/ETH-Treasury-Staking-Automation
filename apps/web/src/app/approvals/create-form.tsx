@@ -9,6 +9,14 @@ import type { ClusterOption, HostOption } from "../../lib/inventory";
 import { approvalActionIdleState, type ApprovalActionState } from "./action-state";
 import { createApprovalAction } from "./actions";
 
+export type ApprovalPrefill = {
+  policyType?: "ROLLOUT" | "DEPOSIT_REQUEST";
+  clusterId?: string;
+  hostId?: string;
+  automationOperation?: string;
+  depositRequestId?: string;
+};
+
 type CreateFormProps = {
   canCreateRollout: boolean;
   canCreateDeposit: boolean;
@@ -16,11 +24,19 @@ type CreateFormProps = {
   hosts: HostOption[];
   deposits: { id: string; requestNumber: string }[];
   rolloutOperations: string[];
+  prefill?: ApprovalPrefill | null;
 };
 
 export function CreateApprovalForm(props: CreateFormProps) {
-  const { canCreateRollout, canCreateDeposit, clusters, hosts, deposits, rolloutOperations } =
-    props;
+  const {
+    canCreateRollout,
+    canCreateDeposit,
+    clusters,
+    hosts,
+    deposits,
+    rolloutOperations,
+    prefill
+  } = props;
 
   const allowedPolicyTypes = useMemo(() => {
     const allowed: ("ROLLOUT" | "DEPOSIT_REQUEST")[] = [];
@@ -29,11 +45,16 @@ export function CreateApprovalForm(props: CreateFormProps) {
     return allowed;
   }, [canCreateRollout, canCreateDeposit]);
 
-  const [expanded, setExpanded] = useState(false);
+  const initialPolicyType =
+    prefill?.policyType && allowedPolicyTypes.includes(prefill.policyType)
+      ? prefill.policyType
+      : (allowedPolicyTypes[0] ?? "");
+
+  const [expanded, setExpanded] = useState(Boolean(prefill));
   const [policyType, setPolicyType] = useState<"ROLLOUT" | "DEPOSIT_REQUEST" | "">(
-    allowedPolicyTypes[0] ?? ""
+    initialPolicyType
   );
-  const [clusterId, setClusterId] = useState("");
+  const [clusterId, setClusterId] = useState(prefill?.clusterId ?? "");
 
   const [state, action, pending] = useActionState(
     (previous: ApprovalActionState, formData: FormData) =>
@@ -115,7 +136,13 @@ export function CreateApprovalForm(props: CreateFormProps) {
               </Select>
             </FormField>
             <FormField label="Operator Host" htmlFor="hostId">
-              <Select id="hostId" name="hostId" disabled={pending || !clusterId} required>
+              <Select
+                id="hostId"
+                name="hostId"
+                defaultValue={prefill?.hostId ?? ""}
+                disabled={pending || !clusterId}
+                required
+              >
                 <option value="">Select host…</option>
                 {filteredHosts.map((host) => (
                   <option key={host.id} value={host.id}>
@@ -128,6 +155,7 @@ export function CreateApprovalForm(props: CreateFormProps) {
               <Select
                 id="automationOperation"
                 name="automationOperation"
+                defaultValue={prefill?.automationOperation ?? ""}
                 disabled={pending}
                 required
               >
@@ -144,7 +172,13 @@ export function CreateApprovalForm(props: CreateFormProps) {
 
         {policyType === "DEPOSIT_REQUEST" ? (
           <FormField label="Deposit Request" htmlFor="depositRequestId">
-            <Select id="depositRequestId" name="depositRequestId" disabled={pending} required>
+            <Select
+              id="depositRequestId"
+              name="depositRequestId"
+              defaultValue={prefill?.depositRequestId ?? ""}
+              disabled={pending}
+              required
+            >
               <option value="">Select deposit request…</option>
               {deposits.map((deposit) => (
                 <option key={deposit.id} value={deposit.id}>

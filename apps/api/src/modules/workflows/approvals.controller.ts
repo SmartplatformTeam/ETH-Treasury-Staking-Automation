@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 
-import { ApprovalPolicyType, ApprovalStatus } from "@eth-staking/db";
+import { ApprovalPolicyType, ApprovalStatus, AutomationOperation } from "@eth-staking/db";
 import type { AuthSession, UserRole } from "@eth-staking/domain";
 
 import { CurrentSession, RequirePermissions } from "../auth/auth.decorators";
@@ -65,6 +65,40 @@ function parsePolicyType(rawValue?: string) {
   );
 }
 
+function parseAutomationOperationFilter(rawValue?: string) {
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const normalizedValue = rawValue.trim().toUpperCase();
+
+  if (Object.values(AutomationOperation).includes(normalizedValue as AutomationOperation)) {
+    return normalizedValue as AutomationOperation;
+  }
+
+  throw new BadRequestException(
+    `Invalid automationOperation '${rawValue}'. Use one of: ${Object.values(AutomationOperation).join(", ")}.`
+  );
+}
+
+function parseIdFilter(rawValue: string | undefined, fieldName: string) {
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const trimmed = rawValue.trim();
+
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(trimmed)) {
+    throw new BadRequestException(`Query parameter '${fieldName}' has an invalid id format.`);
+  }
+
+  return trimmed;
+}
+
 function parseLimit(rawValue?: string) {
   if (!rawValue) {
     return DEFAULT_LIMIT;
@@ -99,6 +133,13 @@ export class ApprovalsController {
     required: false,
     description: `Filter by policy type (${Object.values(ApprovalPolicyType).join(", ")}).`
   })
+  @ApiQuery({ name: "clusterId", required: false, description: "Filter by exact clusterId." })
+  @ApiQuery({ name: "hostId", required: false, description: "Filter by exact operator hostId." })
+  @ApiQuery({
+    name: "automationOperation",
+    required: false,
+    description: `Filter by linked automation operation (${Object.values(AutomationOperation).join(", ")}).`
+  })
   @ApiQuery({
     name: "limit",
     required: false,
@@ -107,14 +148,23 @@ export class ApprovalsController {
   listApprovals(
     @Query("status") statusRaw?: string,
     @Query("policyType") policyTypeRaw?: string,
+    @Query("clusterId") clusterIdRaw?: string,
+    @Query("hostId") hostIdRaw?: string,
+    @Query("automationOperation") automationOperationRaw?: string,
     @Query("limit") limitRaw?: string
   ) {
     const status = parseStatus(statusRaw);
     const policyType = parsePolicyType(policyTypeRaw);
+    const clusterId = parseIdFilter(clusterIdRaw, "clusterId");
+    const hostId = parseIdFilter(hostIdRaw, "hostId");
+    const automationOperation = parseAutomationOperationFilter(automationOperationRaw);
 
     return this.workflowsService.listApprovals({
       ...(status ? { status } : {}),
       ...(policyType ? { policyType } : {}),
+      ...(clusterId ? { clusterId } : {}),
+      ...(hostId ? { hostId } : {}),
+      ...(automationOperation ? { automationOperation } : {}),
       limit: parseLimit(limitRaw)
     });
   }

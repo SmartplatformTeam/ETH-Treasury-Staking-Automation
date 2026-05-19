@@ -10,7 +10,7 @@ import {
 import {
   ApprovalPolicyType,
   ApprovalStatus,
-  type AutomationOperation,
+  AutomationOperation,
   DepositExecutionStatus,
   type Prisma,
   prisma
@@ -30,6 +30,9 @@ type ApprovalRecord = {
   policyType: ApprovalPolicyType;
   currentStep: number;
   finalStatus: ApprovalStatus;
+  clusterId: string | null;
+  hostId: string | null;
+  automationOperation: AutomationOperation | null;
   createdAt: Date;
   updatedAt: Date;
   requestedBy: { id: string; email: string; name: string; role: string };
@@ -51,6 +54,9 @@ function toApprovalResponse(approval: ApprovalRecord) {
     policyType: approval.policyType,
     currentStep: approval.currentStep,
     finalStatus: approval.finalStatus,
+    clusterId: approval.clusterId,
+    hostId: approval.hostId,
+    automationOperation: approval.automationOperation,
     requestedBy: approval.requestedBy,
     approvedBy: approval.approvedBy,
     rejectedBy: approval.rejectedBy,
@@ -67,6 +73,9 @@ const approvalSelect = {
   policyType: true,
   currentStep: true,
   finalStatus: true,
+  clusterId: true,
+  hostId: true,
+  automationOperation: true,
   createdAt: true,
   updatedAt: true,
   requestedBy: {
@@ -106,6 +115,9 @@ const approvalSelect = {
 type ListApprovalsOptions = {
   status?: ApprovalStatus;
   policyType?: ApprovalPolicyType;
+  clusterId?: string;
+  hostId?: string;
+  automationOperation?: AutomationOperation;
   limit: number;
 };
 
@@ -124,9 +136,14 @@ type ListAuditLogsOptions = {
 @Injectable()
 export class WorkflowsService {
   async listApprovals(options: ListApprovalsOptions) {
-    const where = {
+    const where: Prisma.ApprovalWhereInput = {
       ...(options.status ? { finalStatus: options.status } : {}),
-      ...(options.policyType ? { policyType: options.policyType } : {})
+      ...(options.policyType ? { policyType: options.policyType } : {}),
+      ...(options.clusterId ? { clusterId: options.clusterId } : {}),
+      ...(options.hostId ? { hostId: options.hostId } : {}),
+      ...(options.automationOperation
+        ? { automationOperation: options.automationOperation }
+        : {})
     };
     const [total, approvals] = await Promise.all([
       prisma.approval.count({ where }),

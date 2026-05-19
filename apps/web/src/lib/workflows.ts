@@ -202,6 +202,93 @@ export async function loadApprovalAuditEntries(approvalId: string): Promise<Appr
   }
 }
 
+export type ApprovalOptionForAutomation = {
+  id: string;
+  resourceId: string;
+  createdAt: string;
+};
+
+const ROLLOUT_OPERATIONS_TO_POLICY: Record<string, string> = {
+  ROLLOUT_EXECUTE: "ROLLOUT",
+  COMPOSE_EXECUTE: "ROLLOUT",
+  FULL_OPERATOR_MVP: "ROLLOUT",
+  STAGE_ARTIFACTS_EXECUTE: "CHARON_ARTIFACT_STAGE"
+};
+
+export function expectedPolicyForOperation(operation: string): string | null {
+  return ROLLOUT_OPERATIONS_TO_POLICY[operation] ?? null;
+}
+
+export type ApprovedApprovalForAutomation = {
+  id: string;
+  resourceId: string;
+  clusterId: string | null;
+  hostId: string | null;
+  policyType: string;
+  automationOperation: string | null;
+  createdAt: string;
+};
+
+export async function loadApprovedApprovalsForAutomation(): Promise<
+  ApprovedApprovalForAutomation[]
+> {
+  try {
+    const search = new URLSearchParams({ status: "APPROVED", limit: "100" });
+    const response = await fetchApiJson<
+      ListResponse<
+        ApprovalApiItem & {
+          id: string;
+          createdAt: string;
+          clusterId?: string | null;
+          hostId?: string | null;
+          automationOperation?: string | null;
+        }
+      >
+    >(`/approvals?${search.toString()}`);
+    return response.items.map((item) => ({
+      id: item.id,
+      resourceId: item.resourceId,
+      clusterId: item.clusterId ?? null,
+      hostId: item.hostId ?? null,
+      policyType: item.policyType,
+      automationOperation: item.automationOperation ?? null,
+      createdAt: item.createdAt
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function loadApprovalsForAutomation(params: {
+  clusterId: string;
+  hostId: string;
+  automationOperation: string;
+}): Promise<ApprovalOptionForAutomation[]> {
+  const policyType = expectedPolicyForOperation(params.automationOperation);
+  if (!policyType) return [];
+
+  try {
+    const search = new URLSearchParams({
+      status: "APPROVED",
+      policyType,
+      clusterId: params.clusterId,
+      hostId: params.hostId,
+      automationOperation: params.automationOperation,
+      limit: "20"
+    });
+    const response = await fetchApiJson<ListResponse<ApprovalApiItem & { id: string; createdAt: string }>>(
+      `/approvals?${search.toString()}`
+    );
+    return response.items.map((item) => ({
+      id: item.id,
+      resourceId: item.resourceId,
+      createdAt: item.createdAt
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadApprovals(): Promise<ApprovalsResult> {
   try {
     const response = await fetchApiJson<ListResponse<ApprovalApiItem & { id: string }>>(

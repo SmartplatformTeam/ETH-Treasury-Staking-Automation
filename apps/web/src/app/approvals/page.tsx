@@ -8,7 +8,36 @@ import { getWebAuthSession } from "../../lib/auth-session";
 import { loadClusterOptions, loadHostOptions } from "../../lib/inventory";
 import { loadApprovals, loadDeposits } from "../../lib/workflows";
 
-import { CreateApprovalForm } from "./create-form";
+import { CreateApprovalForm, type ApprovalPrefill } from "./create-form";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function firstQueryValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function decodePrefill(raw: string | undefined): ApprovalPrefill | null {
+  if (!raw) return null;
+  try {
+    const decoded = Buffer.from(raw, "base64").toString("utf-8");
+    const parsed = JSON.parse(decoded) as Record<string, unknown>;
+    const policyType =
+      parsed.policyType === "ROLLOUT" || parsed.policyType === "DEPOSIT_REQUEST"
+        ? parsed.policyType
+        : undefined;
+    const out: ApprovalPrefill = {};
+    if (policyType) out.policyType = policyType;
+    if (typeof parsed.clusterId === "string") out.clusterId = parsed.clusterId;
+    if (typeof parsed.hostId === "string") out.hostId = parsed.hostId;
+    if (typeof parsed.automationOperation === "string")
+      out.automationOperation = parsed.automationOperation;
+    if (typeof parsed.depositRequestId === "string")
+      out.depositRequestId = parsed.depositRequestId;
+    return out;
+  } catch {
+    return null;
+  }
+}
 
 const ROLLOUT_OPERATIONS = [
   "ROLLOUT_EXECUTE",
@@ -26,7 +55,10 @@ type ApprovalDisplayRow = {
   decidedBy: string;
 };
 
-export default async function ApprovalsPage() {
+export default async function ApprovalsPage(props: { searchParams?: SearchParams }) {
+  const params = (await props.searchParams) ?? {};
+  const prefillRaw = firstQueryValue(params.prefill);
+  const prefill = decodePrefill(prefillRaw);
   const [approvals, session, clusters, hosts, deposits] = await Promise.all([
     loadApprovals(),
     getWebAuthSession(),
@@ -60,6 +92,7 @@ export default async function ApprovalsPage() {
         hosts={hosts}
         deposits={deposits.rows.map((row) => ({ id: row.id, requestNumber: row.request }))}
         rolloutOperations={ROLLOUT_OPERATIONS}
+        prefill={prefill}
       />
 
       <Panel
