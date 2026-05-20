@@ -176,6 +176,90 @@ Web UI 는 브라우저 헤더 주입을 위해 별도 도구가 필요(예: `Mo
 
 > 사이클 한 줄 요약: **`VERIFY_BASELINE` → `PREFLIGHT_HOST` → `RENDER_RUNTIME` → `VERIFY_RUNTIME` → `ROLLOUT_DRY_RUN` → `STAGE_ARTIFACTS_DRY_RUN` → `COMPOSE_DRY_RUN`** 을 다 통과하면 execute tier 호출(승인 필요) 진행 가능. execute 통과 후 **`HEALTH_SYNC_DRY_RUN` 으로 모니터 payload 확인** → **`DEPLOYED_VERIFY` 로 운영 상태 최종 검증**.
 
+#### Execute-tier operation 디테일 (4개, **사람 승인 필수**)
+
+dry-run 카운터파트가 모두 통과한 뒤 호출. APPROVED 상태의 같은 cluster+host+operation+policy 매칭 approval 이 있어야 server-side 가드(`validateApprovalIfRequired`) 통과. AGENTS.md 절대 원칙 — slash risk / 자금 영향 작업은 자동 실행 금지.
+
+**1) `ROLLOUT_EXECUTE`** — render → 운영 dir 실제 적용 ⚠️ **High Risk**
+- Policy: **ROLLOUT**
+- Playbook: `infra/ansible/playbooks/rollout-runtime.yml` → `roles/cdvn_runtime` (action=rollout) → `rollout.sh --render-dir <r> --approval-file <f> --destination <d> --execute`
+- 하는 일: render dir → 운영 `deployment_path` (`/opt/obol/<cluster>/`) 로 실제 rsync 수행. ROLLOUT_DRY_RUN 의 보고와 똑같은 변경이 실제로 디스크에 적용됨.
+- 부작용:
+  - 디스크: `deployment_path` 안의 파일 추가/변경/삭제 (단, `.charon/` 디렉토리는 rsync exclude 로 보호)
+  - 컨테이너: rollout.sh 자체는 컨테이너 재시작 안 함. compose up 은 별도(`COMPOSE_EXECUTE`).
+- 위험: 잘못된 deployment_path 또는 approval_file 매칭 mismatch → assertion 실패. mainnet 클러스터로 잘못 누르면 운영 validator 가 동작하는 디스크 변경.
+
+**2) `STAGE_ARTIFACTS_EXECUTE`** — Charon validator key/lock 스테이징 ⚠️⚠️ **Critical Risk**
+- Policy: **CHARON_ARTIFACT_STAGE** (다른 execute 와 다른 유일한 정책)
+- Playbook: `infra/ansible/playbooks/stage-charon-artifacts.yml` → `roles/cdvn_artifacts` → `stage-charon-artifacts.sh --runtime-dir <r> --approval-file <f> --source-dir <s> --host-name <h> --execute`
+- 하는 일: host-local secure path 의 `.charon` artifact (`charon-enr-private-key`, `cluster-lock.json`) → `deployment_path/.charon/` 로 복사 + 권한 0600 설정. validator 서명키의 위치를 잡는 단계.
+- 부작용:
+  - 디스크: `deployment_path/.charon/` 에 sensitive 파일 복사 (signing key material 포함)
+  - 컨테이너: 재시작 없음. 다음 COMPOSE_EXECUTE 가 이 키들을 mount 해야 작동.
+- 위험: **double-signing 가능성.** 잘못된 source_dir 의 cluster-lock 이 다른 host 로 가면 같은 validator 가 두 곳에서 서명 → slashing. AGENTS.md "slash risk 자동 실행 금지" 의 핵심 사유.
+- 정책 분리 이유: 다른 execute 와 권한/감사 분리. APPROVER 가 ROLLOUT 과 별개로 신중히 검토.
+
+**3) `COMPOSE_EXECUTE`** — docker compose up 으로 컨테이너 시작/재시작 ⚠️ **High Risk**
+- Policy: **ROLLOUT**
+- Playbook: `infra/ansible/playbooks/execute-compose.yml` → `roles/cdvn_compose` → `rollout-exec.sh --render-dir <r> --approval-file <f> --deployment-path <d> --local --execute`
+- 하는 일: `deployment_path/docker-compose.yml` 기준으로 `docker compose up -d` 실행. 신규 컨테이너 생성, 변경된 config 면 recreate, 동일하면 그대로.
+- 부작용:
+  - 컨테이너: charon / VC / EL / CL / mev-boost 등 일부 또는 전부 (re)start
+  - 네트워크: p2p 재연결, metric/rpc endpoint 복귀
+  - 일시적 slot miss 가능 (재시작 동안)
+- 위험: 운영 시간대에 호출 시 slot miss → 작은 inactivity penalty. mainnet 에서는 유지보수 윈도우 권장. 사용자 timing 결정.
+
+**4) `FULL_OPERATOR_MVP`** — render→verify→rollout→stage→compose 한 번에 ⚠️⚠️⚠️ **Highest Risk**
+- Policy: **ROLLOUT**
+- Playbook: `infra/ansible/playbooks/full-operator-mvp.yml` (10개 task sequential)
+- 하는 일: render → verify → rollout dry-run → **rollout execute** → preflight → artifact stage dry-run → **artifact execute** → deployed verify → compose dry-run → **compose execute**. 한 번 호출로 전체 배포 사이클 자동.
+- 부작용: ROLLOUT_EXECUTE + STAGE_ARTIFACTS_EXECUTE + COMPOSE_EXECUTE 모두 한 번에. 즉 디스크 rsync + key staging + 컨테이너 재시작.
+- 위험:
+  - **운영자 검증 기회 없음** — 각 단계 결과 보지 못하고 다음으로 넘어감
+  - 중간 단계 실패 시 부분 적용 상태로 정지 (rollout 됐는데 stage 실패 같은)
+  - approval 1건으로 3개 dangerous op 가 한꺼번에 실행됨
+- 사용 시점: **신규 호스트 첫 배포** 에만. 이미 운영 중 호스트에는 절대 금지. 가능하면 ROLLOUT_EXECUTE / STAGE_ARTIFACTS_EXECUTE / COMPOSE_EXECUTE 를 개별 approval 로 호출.
+
+#### 특수 — admin prepare tier (1개)
+
+**5) `BOOTSTRAP_HOST`** — 새 호스트의 OS 레벨 사전 설치 (Approval 불필요)
+- Policy: 없음 (`executeAutomationOperations` 세트 밖, dryRun=false 지만 approval 검증 우회)
+- Playbook: `infra/ansible/playbooks/bootstrap-host.yml` → `roles/common`
+- 하는 일: 새 베어메탈 호스트에 docker, docker-compose, jq, rsync, curl, chrony 설치 (apt-get) + `deployment_path` / `secure_config_dir` / artifact / approval 디렉토리 생성 (0700 / 0750 권한) + chrony NTP 설정.
+- 부작용:
+  - 시스템: apt-get 패키지 설치 (root)
+  - 디스크: 4개 주요 디렉토리 생성
+  - 네트워크: chrony NTP 동기화 시작
+- 왜 approval 없나: 호스트의 OS 자체 준비라 validator/cluster 정책과 무관. AGENTS.md "노드 baseline provisioning" 자동화 허용 범위.
+- 사용 시점: **새 베어메탈 호스트 inventory 추가 직후 한 번**. 이미 운영 중 호스트에는 무영향 (idempotent) 하지만 의도 없는 broadcast 위험 — ansible inventory limit 정확히 지정.
+- 주의: 호출 권한은 ADMIN/INFRA_OPERATOR 가능. 운영 보안 등급은 "admin prepare" — 위 4개 execute 와 다름.
+
+#### 전체 사이클 그림
+
+```
+[SAFE  ─ 자유 호출, dry-run]            [EXECUTE ─ approval 필수]
+                                          │
+VERIFY_BASELINE                           │
+PREFLIGHT_HOST                            │
+RENDER_RUNTIME      ─┐                    │
+VERIFY_RUNTIME       │                    │
+ROLLOUT_DRY_RUN      │── 모두 통과 ──────▶ ROLLOUT_EXECUTE           (ROLLOUT policy)
+STAGE_ARTIFACTS_DRY  │                    │
+COMPOSE_DRY_RUN     ─┘                    ▼
+                                        STAGE_ARTIFACTS_EXECUTE   (CHARON_ARTIFACT_STAGE)
+                                          ▼
+                                        COMPOSE_EXECUTE           (ROLLOUT policy)
+                                          ▼
+HEALTH_SYNC_DRY_RUN  ─┐                  │
+DEPLOYED_VERIFY      ─┘ ◀── 배포 후 검증 ┘
+
+[ADMIN PREPARE ─ 호스트 일회성]
+BOOTSTRAP_HOST     ── 새 호스트 한 번만, approval 불필요
+
+[전체 자동화 ─ 신규 호스트 첫 배포만]
+FULL_OPERATOR_MVP  ── ROLLOUT/STAGE/COMPOSE 를 한 번에 (위험성 가장 큼)
+```
+
 ### `/approvals`
 **상단 inline 생성 form** (권한 있는 role 만 트리거 보임)
 - `policyType` 선택 → 조건부 필드
