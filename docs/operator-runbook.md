@@ -123,8 +123,15 @@ Web UI 는 브라우저 헤더 주입을 위해 별도 도구가 필요(예: `Mo
 - (APPROVER / ADMIN 만) **Decision** 패널: `[APPROVE]` 버튼 + reject reason textarea + `[REJECT]` 버튼
 - **Audit Trail** — 이 approval 관련 audit log 만
 
-### `/deposits`
-- DepositRequest 목록 (현재 fixture 위주, write API 미구현)
+### `/deposits` (TREASURY_OPERATOR / ADMIN 만 form 보임)
+**상단 inline 생성 form** — network 선택 → cluster/treasury cascade → pubkey/wc/sig/root hex paste → `[Create Deposit Request]` → 자동 approval 동반 생성
+**테이블** — request / policy / status / requestedBy / exportTarget. 행 클릭 → `/deposits/[id]`
+
+### `/deposits/[id]`
+- 메타: requestNumber, network, owner, validation/approval/execution status, cluster, treasury safe, safe proposal, safeTxHash
+- (TREASURY_OPERATOR/ADMIN) **Actions** 패널: 상태별 `[Export Safe Payload]` / `[Mark Submitted]` / `[Cancel]`
+- **Safe Tx Payload** 패널 — payload JSON `<pre>` (복사해서 Safe UI 에 import)
+- **Audit Trail** — DEPOSIT_REQUEST_CREATED / SAFE_PAYLOAD_EXPORTED / SAFE_PROPOSAL_SUBMITTED 이력
 
 ### `/alerts`
 - 실 unhealthy Node/OperatorHost/Signer 합성 표시 (`severity: WARNING|CRITICAL`)
@@ -176,7 +183,35 @@ Web UI 는 브라우저 헤더 주입을 위해 별도 도구가 필요(예: `Mo
 2. `/approvals/[id]` 에서 reject reason textarea 채움 (필수)
 3. `[REJECT]` → REJECTED 처리. `/audit` 에 `APPROVAL_REJECTED` 가 reason JSON 포함해 기록.
 
-### 4.4 알림 발생 시 (운영자)
+### 4.4 자금 집행 한 사이클 (TREASURY_OPERATOR → APPROVER → TREASURY_OPERATOR + Safe UI)
+
+```
+[1] TREASURY_OPERATOR /deposits → [+ New Deposit Request]
+    network=HOODI, ownerEntity, cluster=sandbox, treasury=sandbox safe
+    pubkey/wc/signature/deposit_data_root 4개 hex paste
+    [Create Deposit Request]
+    → 새 deposit row + 자동 DEPOSIT_REQUEST approval REQUESTED 생성
+
+[2] APPROVER /approvals → REQUESTED 행 클릭 → /approvals/[id]
+    [APPROVE] → APPROVED, AUDIT TRAIL APPROVAL_APPROVED
+
+[3] TREASURY_OPERATOR /deposits/[id]
+    "Safe Wallet Nonce" 입력 (Safe Web UI 에서 현재 nonce 확인 후)
+    [Export Safe Payload]
+    → SafeProposal 생성, payload JSON 페이지에 표시
+
+[4] (사람 작업) Safe Web UI 열기 → Safe Tx Service "import JSON" 사용
+    → 다운로드한 payload paste → 멀티시그 서명자들이 차례로 서명 → 실행
+
+[5] TREASURY_OPERATOR /deposits/[id]
+    Safe Web UI 에서 받은 safeTxHash 입력
+    [Mark Submitted]
+    → executionStatus=SUBMITTED, SafeProposal.status=QUEUED
+
+[6] (validator activation 자동 감지는 follow-up — 운영자가 수동 monitor)
+```
+
+### 4.5 알림 발생 시 (운영자)
 1. `/alerts` 에서 WARNING/CRITICAL 본문 확인. 예: "node health degraded — team-sandbox-obol-a/lighthouse"
 2. **확인 채널**:
    - 팀 서버의 lighthouse 컨테이너 상태 (옆 docker ps)
@@ -432,7 +467,10 @@ constructor(@Inject(XxxService) private readonly xxxService: XxxService) {}
 ### 8.5 `db push + db:seed` 가 매 배포마다 돌음
 schema 변경 후 배포만 하면 자동 반영. 별도 마이그레이션 명령 불필요. 단점: 임시 데이터 변경이 reset.
 
-### 8.6 Web UI 권한 분기는 server-side, defense in depth
+### 8.6 권한 매트릭스 누락 review
+새 endpoint 추가 시 어떤 role 이 호출하는지 `packages/domain/src/auth.ts:rolePermissionMatrix` 와 매칭 확인. P2.7 검증 중 TREASURY_OPERATOR 가 `audit:read` 누락된 것을 발견 — 자기 deposit 의 audit log 도 못 보던 상태였음. 새 detail 페이지가 audit 표시할 때마다 해당 role 매트릭스 review.
+
+### 8.7 Web UI 권한 분기는 server-side, defense in depth
 - `/approvals` 의 form, `/automation` 의 form, `/approvals/[id]` 의 Decision 패널은 모두 server component 단계에서 권한 체크 후 client component 마운트 여부 결정.
 - UI 가 안 보여도 API 에 직접 POST 하면 server-side guard (`assertCreateAllowed`, `@RequirePermissions("approvals:decide")`) 가 다시 차단.
 

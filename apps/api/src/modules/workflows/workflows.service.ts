@@ -653,6 +653,7 @@ export class WorkflowsService {
             treasuryAccountId: deposit.treasuryAccountId,
             pubkey: dto.pubkey,
             withdrawalCredentials: dto.withdrawalCredentials,
+            signature: dto.signature,
             depositDataRoot: dto.depositDataRoot,
             approvalId: approval.id
           }

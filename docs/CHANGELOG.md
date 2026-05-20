@@ -12,6 +12,15 @@ Phase 단위 사용자 시점 변경 history. 코드/Schema 디테일은 [docs/w
 
 ---
 
+## Phase 2-7 — 2026-05-20 — Safe Proposal Adapter (DepositRequest Full UX)
+
+- **운영자 시점**: TREASURY_OPERATOR 가 Web UI 만으로 deposit request 생성 → 자동 approval 동반 → APPROVER 결정 → `/deposits/[id]` 상세에서 [Export Safe Payload] → Safe Tx Service JSON 다운로드 → Safe Web UI 에서 서명 → [Mark Submitted]. 자금 집행 first half 완결.
+- **새 페이지**: `/deposits` (상단 inline form) + `/deposits/[id]` (상세 + Actions + payload JSON + audit trail).
+- **새 API**: `GET/POST /v1/deposits`, `POST /v1/deposits/{id}/{export,mark-submitted,cancel}`, `GET /v1/inventory/treasury-accounts`. AuditLog 신규 actionType 3개.
+- **Domain util**: `networks.ts` (deposit contract per network), `deposit-encoding.ts` (ABI encoder, 외부 SDK 없이), `safe-tx.ts` (Safe Tx Service v1 JSON builder).
+- **부수 수정**: TREASURY_OPERATOR 권한 매트릭스에 `audit:read` 추가 (자기 deposit 흐름 추적 가능해야 함). AGENTS.md 절대 원칙 — 자동 서명 절대 안 함.
+- Detail: [work-log/2026-05-20-phase2-7-done.md](work-log/2026-05-20-phase2-7-done.md)
+
 ## Phase 2-6 — 2026-05-19 — Beacon node health ingestion + NodeHealthSnapshot
 
 - **운영자 시점**: `/alerts` 페이지가 fixture 가 아닌 실 health 상태 표시. lighthouse 의 `optimistic sync` 같은 상황이 WARNING 으로 1분 내 노출.

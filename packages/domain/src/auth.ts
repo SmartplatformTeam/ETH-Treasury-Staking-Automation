@@ -115,7 +115,8 @@ const rolePermissionMatrix = {
     "deposits:write",
     "approvals:read",
     "rewards:read",
-    "safe-proposals:write"
+    "safe-proposals:write",
+    "audit:read"
   ],
   INFRA_OPERATOR: [
     "dashboard:read",
