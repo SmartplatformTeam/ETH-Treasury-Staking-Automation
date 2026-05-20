@@ -143,6 +143,12 @@ export const opsNavigation: NavItem[] = [
     label: "Audit",
     description: "operator actions and payload history",
     requiredPermission: "audit:read"
+  },
+  {
+    href: "/docs",
+    label: "Docs",
+    description: "operator runbook and phase changelog",
+    requiredPermission: "dashboard:read"
   }
 ];
 
