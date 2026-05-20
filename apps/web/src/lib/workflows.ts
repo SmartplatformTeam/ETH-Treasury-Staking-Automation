@@ -179,6 +179,35 @@ export async function loadApproval(id: string): Promise<ApprovalDetail | null> {
   }
 }
 
+export async function loadAuditEntriesForResource(
+  resourceType: "Approval" | "DepositRequest" | "AutomationRun",
+  resourceId: string
+): Promise<ApprovalAuditEntry[]> {
+  try {
+    const response = await fetchApiJson<
+      ListResponse<
+        AuditLogApiItem & {
+          id: string;
+          resourceId: string;
+          diff: Record<string, unknown> | null;
+        }
+      >
+    >(`/audit-logs?resourceType=${encodeURIComponent(resourceType)}&limit=50`);
+    return response.items
+      .filter((item) => item.resourceId === resourceId)
+      .map((item) => ({
+        id: item.id,
+        actionType: item.actionType,
+        actorEmail: item.actor?.email ?? "system",
+        actorName: item.actor?.name ?? "system",
+        diff: item.diff,
+        createdAt: item.createdAt
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadApprovalAuditEntries(approvalId: string): Promise<ApprovalAuditEntry[]> {
   try {
     const response = await fetchApiJson<ListResponse<AuditLogApiItem & {

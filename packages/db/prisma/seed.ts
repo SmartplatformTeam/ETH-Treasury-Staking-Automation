@@ -268,6 +268,19 @@ async function main() {
     }
   });
 
+  await prisma.treasuryAccount.upsert({
+    where: { safeAddress: "0x000000000000000000000000000000000000beef" },
+    update: {},
+    create: {
+      label: "Sandbox Hoodi Treasury",
+      type: TreasuryAccountType.SAFE,
+      network: Network.HOODI,
+      safeAddress: "0x000000000000000000000000000000000000beef",
+      chainId: 560048,
+      isOvmAccount: true
+    }
+  });
+
   const dkgCeremony = await prisma.dkgCeremony.upsert({
     where: { ceremonyNumber: "dkg-2026-04-14-01" },
     update: {},

@@ -423,6 +423,18 @@ model SafeProposal {
   payloadObjectKey String?
   safeTxHash       String?            @unique
   exportedById     String?
+  chainId          Int?
+  to               String?
+  value            String?
+  data             String?
+  operation        Int                @default(0)
+  safeTxGas        String             @default("0")
+  baseGas          String             @default("0")
+  gasPrice         String             @default("0")
+  gasToken         String             @default("0x0000000000000000000000000000000000000000")
+  refundReceiver   String             @default("0x0000000000000000000000000000000000000000")
+  nonce            String?
+  payloadJson      Json?
   treasuryAccount  TreasuryAccount    @relation(fields: [treasuryAccountId], references: [id])
   exportedBy       User?              @relation("safe_exported_by", fields: [exportedById], references: [id])
   depositRequest   DepositRequest?

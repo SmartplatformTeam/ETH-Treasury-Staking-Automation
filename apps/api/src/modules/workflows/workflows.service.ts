@@ -12,12 +12,26 @@ import {
   ApprovalStatus,
   AutomationOperation,
   DepositExecutionStatus,
+  DepositValidationStatus,
+  Network,
   type Prisma,
+  SafeProposalStatus,
   prisma
 } from "@eth-staking/db";
-import type { AuthSession } from "@eth-staking/domain";
+import {
+  buildSafeTxPayload,
+  encodeDepositCalldata,
+  ETH_32_WEI,
+  getNetworkConfig,
+  type AuthSession
+} from "@eth-staking/domain";
 
 import type { CreateApprovalDto } from "./dto/create-approval.dto";
+import type {
+  CreateDepositRequestDto,
+  ExportSafePayloadDto,
+  MarkSubmittedDto
+} from "./dto/deposit-request.dto";
 
 function isDecidableStatus(status: ApprovalStatus) {
   return status === ApprovalStatus.REQUESTED || status === ApprovalStatus.IN_REVIEW;
@@ -538,4 +552,472 @@ export class WorkflowsService {
       }))
     };
   }
+
+  async getDepositRequest(id: string) {
+    const deposit = await prisma.depositRequest.findUnique({
+      where: { id },
+      select: depositRequestSelect
+    });
+    if (!deposit) {
+      throw new NotFoundException(`Deposit request '${id}' was not found.`);
+    }
+    return toDepositRequestResponse(deposit);
+  }
+
+  async createDepositRequest(dto: CreateDepositRequestDto, session: AuthSession) {
+    const actor = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    });
+    if (!actor) {
+      throw new UnauthorizedException("Authenticated user was not found in the directory.");
+    }
+
+    const [cluster, treasury] = await Promise.all([
+      prisma.cluster.findUnique({
+        where: { id: dto.clusterId },
+        select: { id: true, name: true, network: true }
+      }),
+      prisma.treasuryAccount.findUnique({
+        where: { id: dto.treasuryAccountId },
+        select: { id: true, label: true, safeAddress: true, chainId: true, network: true }
+      })
+    ]);
+    if (!cluster) {
+      throw new NotFoundException(`Cluster '${dto.clusterId}' was not found.`);
+    }
+    if (!treasury) {
+      throw new NotFoundException(`Treasury account '${dto.treasuryAccountId}' was not found.`);
+    }
+    if (cluster.network !== dto.network) {
+      throw new BadRequestException(
+        `Network mismatch: cluster '${cluster.name}' is on ${cluster.network} but request is for ${dto.network}.`
+      );
+    }
+    if (treasury.network !== dto.network) {
+      throw new BadRequestException(
+        `Network mismatch: treasury '${treasury.label}' is on ${treasury.network} but request is for ${dto.network}.`
+      );
+    }
+
+    const networkCfg = getNetworkConfig(dto.network as never);
+    if (treasury.chainId !== networkCfg.chainId) {
+      throw new BadRequestException(
+        `Treasury chainId ${treasury.chainId} does not match expected chainId ${networkCfg.chainId} for ${dto.network}.`
+      );
+    }
+
+    const requestNumber = `deposit-request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const created = await prisma.$transaction(async (tx) => {
+      const deposit = await tx.depositRequest.create({
+        data: {
+          requestNumber,
+          network: dto.network,
+          ownerEntity: dto.ownerEntity,
+          validatorCount: dto.validatorCount,
+          depositDataObjectKey: dto.depositDataObjectKey ?? `inline:${requestNumber}`,
+          validationStatus: DepositValidationStatus.VALID,
+          approvalStatus: ApprovalStatus.REQUESTED,
+          executionStatus: DepositExecutionStatus.DRAFT,
+          requestedById: actor.id,
+          clusterId: cluster.id,
+          treasuryAccountId: treasury.id
+        }
+      });
+
+      const approval = await tx.approval.create({
+        data: {
+          resourceType: "DepositRequest",
+          resourceId: deposit.id,
+          policyType: ApprovalPolicyType.DEPOSIT_REQUEST,
+          currentStep: 1,
+          finalStatus: ApprovalStatus.REQUESTED,
+          requestedById: actor.id,
+          depositRequestId: deposit.id
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionType: "DEPOSIT_REQUEST_CREATED",
+          resourceType: "DepositRequest",
+          resourceId: deposit.id,
+          diff: {
+            requestNumber: deposit.requestNumber,
+            network: deposit.network,
+            ownerEntity: deposit.ownerEntity,
+            validatorCount: deposit.validatorCount,
+            clusterId: deposit.clusterId,
+            treasuryAccountId: deposit.treasuryAccountId,
+            pubkey: dto.pubkey,
+            withdrawalCredentials: dto.withdrawalCredentials,
+            depositDataRoot: dto.depositDataRoot,
+            approvalId: approval.id
+          }
+        }
+      });
+
+      return tx.depositRequest.findUniqueOrThrow({
+        where: { id: deposit.id },
+        select: depositRequestSelect
+      });
+    });
+
+    return toDepositRequestResponse(created);
+  }
+
+  async exportSafePayload(
+    depositRequestId: string,
+    dto: ExportSafePayloadDto,
+    session: AuthSession
+  ) {
+    const actor = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    });
+    if (!actor) {
+      throw new UnauthorizedException("Authenticated user was not found in the directory.");
+    }
+
+    const deposit = await prisma.depositRequest.findUnique({
+      where: { id: depositRequestId },
+      select: {
+        id: true,
+        requestNumber: true,
+        network: true,
+        executionStatus: true,
+        approvalStatus: true,
+        treasuryAccountId: true,
+        treasuryAccount: {
+          select: { id: true, label: true, safeAddress: true, chainId: true, network: true }
+        },
+        safeProposalId: true,
+        approvals: {
+          orderBy: { createdAt: "desc" },
+          where: { policyType: ApprovalPolicyType.DEPOSIT_REQUEST },
+          take: 1,
+          select: { id: true, finalStatus: true }
+        }
+      }
+    });
+    if (!deposit) {
+      throw new NotFoundException(`Deposit request '${depositRequestId}' was not found.`);
+    }
+    if (deposit.executionStatus !== DepositExecutionStatus.DRAFT) {
+      throw new ConflictException(
+        `Deposit request is in executionStatus '${deposit.executionStatus}' and cannot be exported.`
+      );
+    }
+    const linkedApproval = deposit.approvals[0];
+    if (!linkedApproval || linkedApproval.finalStatus !== ApprovalStatus.APPROVED) {
+      throw new ForbiddenException(
+        "Linked DEPOSIT_REQUEST approval must be APPROVED before exporting Safe payload."
+      );
+    }
+    if (deposit.safeProposalId) {
+      throw new ConflictException(
+        "Deposit already has a SafeProposal linked. Cancel and recreate to redo."
+      );
+    }
+    if (!deposit.treasuryAccount || !deposit.treasuryAccountId) {
+      throw new ConflictException(
+        "Deposit request has no linked treasury account. Recreate the request."
+      );
+    }
+    const treasuryAccountId = deposit.treasuryAccountId;
+    const treasuryAccount = deposit.treasuryAccount;
+
+    const auditEntry = await prisma.auditLog.findFirst({
+      where: {
+        actionType: "DEPOSIT_REQUEST_CREATED",
+        resourceType: "DepositRequest",
+        resourceId: deposit.id
+      },
+      select: { diff: true }
+    });
+    if (!auditEntry || typeof auditEntry.diff !== "object" || auditEntry.diff === null) {
+      throw new ConflictException(
+        "Original deposit data (pubkey/wc/signature/root) was not found in audit log."
+      );
+    }
+    const diff = auditEntry.diff as Record<string, unknown>;
+    const pubkey = diff.pubkey;
+    const withdrawalCredentials = diff.withdrawalCredentials;
+    const depositDataRoot = diff.depositDataRoot;
+    const signature = (diff as { signature?: unknown }).signature ?? null;
+
+    if (
+      typeof pubkey !== "string" ||
+      typeof withdrawalCredentials !== "string" ||
+      typeof depositDataRoot !== "string"
+    ) {
+      throw new ConflictException(
+        "Deposit data audit entry is missing required fields. Recreate the deposit request."
+      );
+    }
+    if (typeof signature !== "string") {
+      throw new ConflictException(
+        "Deposit data audit entry is missing the signature field. Recreate the deposit request."
+      );
+    }
+
+    const networkCfg = getNetworkConfig(deposit.network as never);
+    const calldata = encodeDepositCalldata({
+      pubkey,
+      withdrawalCredentials,
+      signature,
+      depositDataRoot
+    });
+
+    const safeAddress = treasuryAccount.safeAddress;
+    const payload = buildSafeTxPayload({
+      chainId: networkCfg.chainId,
+      safeAddress,
+      to: networkCfg.depositContract,
+      value: ETH_32_WEI,
+      data: calldata,
+      operation: 0,
+      nonce: dto.nonce
+    });
+
+    const proposalNumber = `safe-${deposit.network.toLowerCase()}-${Date.now().toString(36)}`;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const proposal = await tx.safeProposal.create({
+        data: {
+          proposalNumber,
+          treasuryAccountId,
+          status: SafeProposalStatus.EXPORTED,
+          description: `Deposit ${deposit.requestNumber} → ${networkCfg.depositContract}`,
+          exportedById: actor.id,
+          chainId: networkCfg.chainId,
+          to: networkCfg.depositContract,
+          value: ETH_32_WEI,
+          data: calldata,
+          operation: 0,
+          nonce: dto.nonce,
+          payloadJson: payload as unknown as Prisma.InputJsonValue
+        }
+      });
+
+      await tx.depositRequest.update({
+        where: { id: deposit.id },
+        data: {
+          safeProposalId: proposal.id,
+          executionStatus: DepositExecutionStatus.EXPORTED,
+          exportedPayloadObjectKey: `inline:${proposal.proposalNumber}`
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionType: "SAFE_PAYLOAD_EXPORTED",
+          resourceType: "DepositRequest",
+          resourceId: deposit.id,
+          diff: {
+            safeProposalId: proposal.id,
+            proposalNumber: proposal.proposalNumber,
+            chainId: networkCfg.chainId,
+            to: networkCfg.depositContract,
+            value: ETH_32_WEI,
+            nonce: dto.nonce
+          }
+        }
+      });
+
+      return tx.depositRequest.findUniqueOrThrow({
+        where: { id: deposit.id },
+        select: depositRequestSelect
+      });
+    });
+
+    return toDepositRequestResponse(updated);
+  }
+
+  async markDepositSubmitted(
+    depositRequestId: string,
+    dto: MarkSubmittedDto,
+    session: AuthSession
+  ) {
+    const actor = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    });
+    if (!actor) {
+      throw new UnauthorizedException("Authenticated user was not found in the directory.");
+    }
+
+    const deposit = await prisma.depositRequest.findUnique({
+      where: { id: depositRequestId },
+      select: {
+        id: true,
+        executionStatus: true,
+        safeProposalId: true,
+        safeProposal: { select: { id: true, status: true } }
+      }
+    });
+    if (!deposit) {
+      throw new NotFoundException(`Deposit request '${depositRequestId}' was not found.`);
+    }
+    if (deposit.executionStatus !== DepositExecutionStatus.EXPORTED) {
+      throw new ConflictException(
+        `Deposit request is in executionStatus '${deposit.executionStatus}' and cannot be marked submitted.`
+      );
+    }
+    if (!deposit.safeProposal) {
+      throw new ConflictException("Deposit request has no linked SafeProposal.");
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.safeProposal.update({
+        where: { id: deposit.safeProposal!.id },
+        data: { status: SafeProposalStatus.QUEUED, safeTxHash: dto.safeTxHash }
+      });
+      await tx.depositRequest.update({
+        where: { id: deposit.id },
+        data: { executionStatus: DepositExecutionStatus.SUBMITTED }
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionType: "SAFE_PROPOSAL_SUBMITTED",
+          resourceType: "DepositRequest",
+          resourceId: deposit.id,
+          diff: {
+            safeProposalId: deposit.safeProposal!.id,
+            safeTxHash: dto.safeTxHash
+          }
+        }
+      });
+      return tx.depositRequest.findUniqueOrThrow({
+        where: { id: deposit.id },
+        select: depositRequestSelect
+      });
+    });
+
+    return toDepositRequestResponse(updated);
+  }
+
+  async cancelDepositRequest(depositRequestId: string, session: AuthSession) {
+    const actor = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    });
+    if (!actor) {
+      throw new UnauthorizedException("Authenticated user was not found in the directory.");
+    }
+
+    const deposit = await prisma.depositRequest.findUnique({
+      where: { id: depositRequestId },
+      select: { id: true, executionStatus: true, safeProposalId: true }
+    });
+    if (!deposit) {
+      throw new NotFoundException(`Deposit request '${depositRequestId}' was not found.`);
+    }
+    if (
+      deposit.executionStatus !== DepositExecutionStatus.DRAFT &&
+      deposit.executionStatus !== DepositExecutionStatus.EXPORTED
+    ) {
+      throw new ConflictException(
+        `Deposit request is in executionStatus '${deposit.executionStatus}' and cannot be cancelled.`
+      );
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.depositRequest.update({
+        where: { id: deposit.id },
+        data: { executionStatus: DepositExecutionStatus.CANCELLED }
+      });
+      if (deposit.safeProposalId) {
+        await tx.safeProposal.update({
+          where: { id: deposit.safeProposalId },
+          data: { status: SafeProposalStatus.CANCELLED }
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionType: "DEPOSIT_REQUEST_CANCELLED",
+          resourceType: "DepositRequest",
+          resourceId: deposit.id,
+          diff: { previousStatus: deposit.executionStatus }
+        }
+      });
+      return tx.depositRequest.findUniqueOrThrow({
+        where: { id: deposit.id },
+        select: depositRequestSelect
+      });
+    });
+
+    return toDepositRequestResponse(updated);
+  }
+}
+
+const depositRequestSelect = {
+  id: true,
+  requestNumber: true,
+  network: true,
+  ownerEntity: true,
+  validatorCount: true,
+  validationStatus: true,
+  approvalStatus: true,
+  executionStatus: true,
+  exportedPayloadObjectKey: true,
+  depositDataObjectKey: true,
+  createdAt: true,
+  updatedAt: true,
+  requestedBy: { select: { id: true, email: true, name: true } },
+  cluster: { select: { id: true, name: true } },
+  treasuryAccount: {
+    select: { id: true, label: true, safeAddress: true, chainId: true, network: true }
+  },
+  safeProposal: {
+    select: {
+      id: true,
+      proposalNumber: true,
+      status: true,
+      chainId: true,
+      to: true,
+      value: true,
+      data: true,
+      operation: true,
+      nonce: true,
+      safeTxHash: true,
+      payloadJson: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  },
+  approvals: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: { id: true, policyType: true, finalStatus: true }
+  }
+} as const;
+
+type DepositRequestRecord = Prisma.DepositRequestGetPayload<{ select: typeof depositRequestSelect }>;
+
+function toDepositRequestResponse(deposit: DepositRequestRecord) {
+  return {
+    id: deposit.id,
+    requestNumber: deposit.requestNumber,
+    network: deposit.network,
+    ownerEntity: deposit.ownerEntity,
+    validatorCount: deposit.validatorCount,
+    validationStatus: deposit.validationStatus,
+    approvalStatus: deposit.approvalStatus,
+    executionStatus: deposit.executionStatus,
+    exportedPayloadObjectKey: deposit.exportedPayloadObjectKey,
+    depositDataObjectKey: deposit.depositDataObjectKey,
+    requestedBy: deposit.requestedBy,
+    cluster: deposit.cluster,
+    treasuryAccount: deposit.treasuryAccount,
+    safeProposal: deposit.safeProposal,
+    latestApproval: deposit.approvals[0] ?? null,
+    createdAt: deposit.createdAt,
+    updatedAt: deposit.updatedAt
+  };
 }

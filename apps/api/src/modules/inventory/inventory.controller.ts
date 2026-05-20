@@ -57,4 +57,10 @@ export class InventoryController {
   listSigners() {
     return this.inventoryService.listSigners();
   }
+
+  @Get("treasury-accounts")
+  @ApiOperation({ summary: "List Safe treasury accounts available for deposit export." })
+  listTreasuryAccounts() {
+    return this.inventoryService.listTreasuryAccounts();
+  }
 }

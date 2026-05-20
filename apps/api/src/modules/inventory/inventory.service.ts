@@ -302,6 +302,24 @@ export class InventoryService {
     };
   }
 
+  async listTreasuryAccounts() {
+    const items = await prisma.treasuryAccount.findMany({
+      orderBy: { label: "asc" },
+      select: {
+        id: true,
+        label: true,
+        type: true,
+        network: true,
+        safeAddress: true,
+        chainId: true,
+        isOvmAccount: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    return { total: items.length, items };
+  }
+
   private resolveClusterRuntimeStatus(statuses: HealthStatus[]): HealthStatus {
     if (statuses.includes(HealthStatus.CRITICAL)) {
       return HealthStatus.CRITICAL;
