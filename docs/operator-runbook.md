@@ -297,6 +297,12 @@ FULL_OPERATOR_MVP  ── ROLLOUT/STAGE/COMPOSE 를 한 번에 (위험성 가장
 ### `/rewards`
 - 월간 reward ledger (현재 fixture)
 
+### `/docs`
+- 본 runbook + CHANGELOG 를 Web UI 안에서 렌더. nav 의 "Docs" 메뉴.
+- `/docs/runbook` — operator-runbook.md (이 문서 자체)
+- `/docs/changelog` — phase 별 변경 history
+- 좌측 sticky TOC + 헤더 anchor. md 파일은 `docs/` 폴더의 원본 그대로 — phase done 시 commit 하면 자동 반영, build step 불필요.
+
 ---
 
 ## 4. 주요 시나리오

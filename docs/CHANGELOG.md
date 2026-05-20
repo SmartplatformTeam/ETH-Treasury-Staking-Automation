@@ -12,6 +12,15 @@ Phase 단위 사용자 시점 변경 history. 코드/Schema 디테일은 [docs/w
 
 ---
 
+## Docs viewer — 2026-05-20 — runbook/changelog Web UI 렌더
+
+- **운영자 시점**: 새 페이지 `/docs` (목록) + `/docs/runbook` + `/docs/changelog`. nav 의 "Docs" 메뉴 — operator-runbook.md / CHANGELOG.md 가 BMW M 톤으로 렌더, 좌측 sticky TOC + 헤더 자동 anchor.
+- **권한**: `dashboard:read` (모든 role).
+- **소스**: `docs/*.md` 마크다운 파일 — phase done 시 commit 하는 그대로 곧 Web 에서 보임. 별도 build step 불필요.
+- **dependency**: react-markdown + remark-gfm + rehype-slug + rehype-autolink-headings (apps/web).
+
+---
+
 ## Phase 2-7 — 2026-05-20 — Safe Proposal Adapter (DepositRequest Full UX)
 
 - **운영자 시점**: TREASURY_OPERATOR 가 Web UI 만으로 deposit request 생성 → 자동 approval 동반 → APPROVER 결정 → `/deposits/[id]` 상세에서 [Export Safe Payload] → Safe Tx Service JSON 다운로드 → Safe Web UI 에서 서명 → [Mark Submitted]. 자금 집행 first half 완결.
