@@ -107,6 +107,75 @@ Web UI 는 브라우저 헤더 주입을 위해 별도 도구가 필요(예: `Mo
 - `ROLLOUT_EXECUTE`, `STAGE_ARTIFACTS_EXECUTE`, `COMPOSE_EXECUTE`, `FULL_OPERATOR_MVP` → **execute**, ROLLOUT 또는 CHARON_ARTIFACT_STAGE policy approval 필수
 - `BOOTSTRAP_HOST` → admin prepare (dryRun=false 지만 approval 불필요)
 
+#### Safe-tier operation 디테일 (9개)
+
+운영 사이클의 자연스러운 순서 — 위에서 아래로 한 번 다 돌리면 "이 호스트에 새 구성을 적용해도 안전한가" 가 검증됨. 모두 read-only / 계획만 보고하므로 approval 없이 누가 호출해도 격리 sandbox 밖 변경 없음.
+
+**1) `VERIFY_BASELINE`** — 기준선 무결성 검사
+- Playbook: `infra/ansible/playbooks/verify-baseline.yml` → `infra/obol-cdvn/scripts/verify-baseline.sh`
+- 하는 일: 레포에 체크인된 CDVN baseline mirror (docker-compose 템플릿 / env / overlay) 파일들이 빠짐없이 존재하고, jwt.hex 같은 sensitive 파일이 실수로 들어가 있지 않은지 확인.
+- 부작용: **없음** (read-only, localhost connection, inventory 불필요)
+- 언제: 초기 셋업, CI, 베이스라인 손상 의심 시. 가장 가벼운 점검.
+- 주의: baseline 파일이 빠지면 fail — operator 가 누락 파일 복구 필요.
+
+**2) `PREFLIGHT_HOST`** — 호스트 사전점검
+- Playbook: `infra/ansible/playbooks/preflight-host.yml` → `roles/cdvn_runtime` (action=preflight) → `host-preflight.sh --min-disk-gb 20 --local --execute`
+- 하는 일: 대상 호스트의 디스크 여유(기본 20GB), 메모리, Docker 데몬 상태, 포트 가용성, 권한 점검. `--execute` 플래그지만 검증만 — 시스템에 쓰지 않음.
+- 부작용: **없음** (호스트 상태 읽기만)
+- 언제: 배포 직전 — "이 호스트에 새 컨테이너 띄울 자리/조건 갖춰져 있나" 확인.
+- 주의: 디스크/메모리 부족 fail 시 rollout 진행 금지.
+
+**3) `RENDER_RUNTIME`** — runtime 구성 파일 생성 ⚠️ 디스크 쓰기
+- Playbook: `infra/ansible/playbooks/render-runtime.yml` → `roles/cdvn_runtime` (action=render) → `render.sh --cluster-file ... --host-file ... --output-dir ... --force`
+- 하는 일: `cluster.yml` + `host.yml` 입력 → `docker-compose.yml` + `.env` + overlay 파일들을 **render dir** (`/tmp/cdvn-operator-runtime-<cluster>/` 같은 임시 디렉토리) 에 작성.
+- 부작용: **render dir 에 파일 쓰기** (deployment_path 가 아니라 임시 작업 폴더). `--force` 이므로 기존 render dir 덮어씀.
+- 언제: cluster/host 구성 변경 후, rollout 전 미리보기.
+- 주의: 실제 운영 디렉토리(`/opt/obol/...`) 는 안 건드림. 단, render dir 에 남은 이전 결과는 덮어쓰니 인공적 비교 필요 시 미리 backup.
+
+**4) `VERIFY_RUNTIME`** — render 결과 검증
+- Playbook: `infra/ansible/playbooks/verify-runtime.yml` → `roles/cdvn_runtime` (action=verify) → `verify.sh --render-dir <render_dir> --host-name <name>`
+- 하는 일: 방금 RENDER_RUNTIME 이 만든 결과가 baseline version / overlay 규칙 / secret 누락 안 됨 / 호스트명 매칭 같은 일관성 검사.
+- 부작용: **없음** (read-only)
+- 언제: RENDER_RUNTIME 직후 무조건. fail 시 rollout 못 들어감.
+- 주의: extraVars 의 `verify_deployed=false` 가 기본 — render dir 검증. `true` 면 이미 배포된 deployment_path 검증.
+
+**5) `ROLLOUT_DRY_RUN`** — 배포 변경 미리보기
+- Playbook: `infra/ansible/playbooks/rollout-runtime.yml` → `roles/cdvn_runtime` (action=rollout) → `rollout.sh --render-dir <r> --approval-file <f> --destination <d>` (without `--execute`)
+- 하는 일: render dir → 실제 운영 deployment_path (`/opt/obol/<cluster>/`) 로 rsync 했을 때 **어떤 파일이 추가/변경/삭제되는지** stdout 으로 보고. 실제 복사는 안 함.
+- 부작용: **없음** (rsync --dry-run 동등 동작)
+- 언제: VERIFY_RUNTIME 통과 후, ROLLOUT_EXECUTE 호출 전. "정확히 이 파일이 바뀐다" 확인용.
+- 주의: approval_file (sandbox 의 경우 `/secure/approvals/active/...`) 가 존재해야 assertion 통과. `.charon/` 같은 sensitive 디렉토리는 rsync exclude 로 보호됨.
+
+**6) `STAGE_ARTIFACTS_DRY_RUN`** — Charon artifact 스테이징 미리보기
+- Playbook: `infra/ansible/playbooks/stage-charon-artifacts.yml` → `roles/cdvn_artifacts` → `stage-charon-artifacts.sh --runtime-dir <r> --approval-file <f> --source-dir <s> --host-name <h>` (without `--execute`)
+- 하는 일: host-local secure path 의 `.charon` artifact (charon-enr-private-key, cluster-lock.json 등) 가 deployment_path 안 `.charon/` 디렉토리로 어떻게 staging 될지 보고. 실제 복사 안 함.
+- 부작용: **없음** (계획 보고만)
+- 언제: ROLLOUT_DRY_RUN 통과 후, STAGE_ARTIFACTS_EXECUTE 전.
+- 주의: `artifact_source_dir` (host 의 secure path) 미존재 시 fail. AGENTS.md 절대 원칙 — artifact 는 **호스트 로컬에서만** 처리, 절대 control plane 으로 안 올라옴.
+
+**7) `COMPOSE_DRY_RUN`** — docker compose 시작 미리보기
+- Playbook: `infra/ansible/playbooks/execute-compose.yml` → `roles/cdvn_compose` → `rollout-exec.sh --render-dir <r> --approval-file <f> --deployment-path <d> --local` (without `--execute`)
+- 하는 일: deployment_path 에서 `docker compose config` / validate / 어떤 container 가 어떤 image+env 로 뜰지 보고. 실제 `up` 안 함.
+- 부작용: **없음** (config 검증만)
+- 언제: render/rollout/stage 모두 미리보기 통과 후, COMPOSE_EXECUTE 전 마지막 게이트.
+- 주의: rollout/stage 가 실제로는 (dry-run 이라) 아직 디스크에 안 적용된 상태이므로 compose 검증이 render dir 기준. 운영 흐름상 EXECUTE 들 통과 후 다시 한 번 dry-run 호출도 권장.
+
+**8) `HEALTH_SYNC_DRY_RUN`** — health 메타데이터 전송 미리보기
+- Playbook: `infra/ansible/playbooks/health-sync.yml` → `roles/cdvn_health` → `health-sync.sh --render-dir <r> --host-name <h> --endpoint-url <url> --dry-run`
+- 하는 일: 배포된 호스트가 control-plane 의 `POST /v1/internal/cdvn/health-sync` 로 보낼 payload(cluster/host/baselineRef/overlayProfiles/renderedAt) 를 조립해서 stdout 으로 보여줌. 실제 HTTP POST 안 함.
+- 부작용: **없음** (network call 없음)
+- 언제: 배포 후 health 모니터링 흐름 시작 전, 또는 health endpoint 변경 후 검증.
+- 주의: `control_plane_health_sync_token` / `endpoint_url` 미설정 시 실패. dry-run 이지만 payload 안에 환경변수 노출되니까 redact 확인.
+
+**9) `DEPLOYED_VERIFY`** — 실제 배포된 상태 검증
+- Playbook: `infra/ansible/playbooks/verify-runtime.yml` (VERIFY_RUNTIME 과 같은 playbook, extraVars `verify_deployed=true` 차이) → `verify.sh --render-dir <deployment_path> --host-name <h>`
+- 하는 일: 임시 render dir 가 아니라 **운영 deployment_path** (`/opt/obol/<cluster>/`) 의 실제 파일들이 기대 구성과 일치하는지 검증. compose up 직후 사용.
+- 부작용: **없음** (read-only)
+- 언제: COMPOSE_EXECUTE 직후 — "배포 결과가 우리가 의도한 그 상태인가" 최종 확인.
+- 주의: deployment_path 부재 시 fail. `.charon` 디렉토리는 검증 범위 밖 (sensitive 보호).
+
+> 사이클 한 줄 요약: **`VERIFY_BASELINE` → `PREFLIGHT_HOST` → `RENDER_RUNTIME` → `VERIFY_RUNTIME` → `ROLLOUT_DRY_RUN` → `STAGE_ARTIFACTS_DRY_RUN` → `COMPOSE_DRY_RUN`** 을 다 통과하면 execute tier 호출(승인 필요) 진행 가능. execute 통과 후 **`HEALTH_SYNC_DRY_RUN` 으로 모니터 payload 확인** → **`DEPLOYED_VERIFY` 로 운영 상태 최종 검증**.
+
 ### `/approvals`
 **상단 inline 생성 form** (권한 있는 role 만 트리거 보임)
 - `policyType` 선택 → 조건부 필드
