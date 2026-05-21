@@ -16,6 +16,12 @@ export type DocPage = {
 
 export const docPages: DocPage[] = [
   {
+    slug: "handoff",
+    filePath: "SESSION-HANDOFF.md",
+    title: "Session Handoff",
+    description: "새 세션 진입 시 1분 안에 컨텍스트 복원. 현재 상태, 다음 후보, follow-up."
+  },
+  {
     slug: "runbook",
     filePath: "operator-runbook.md",
     title: "Operator Runbook",

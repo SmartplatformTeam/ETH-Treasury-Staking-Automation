@@ -69,6 +69,7 @@ When a phase reaches its "done" condition:
 1. **`docs/work-log/<date>-phase<N>-done.md`** — internal details (schema, files changed, verification scenarios, follow-ups). Already the existing pattern.
 2. **`docs/CHANGELOG.md`** — append one paragraph at the top (operator-facing summary, new endpoints/env/pages, link to done doc).
 3. **`docs/operator-runbook.md`** — update only if user-facing behavior changed (new page, new flow, new troubleshooting case, new known pattern).
+4. **`docs/SESSION-HANDOFF.md`** — refresh "last updated" + §1 한 줄 상태 + §3 배포 commit + §5 phase 표에 한 줄 추가. follow-up 항목 변동 있으면 §7 도. 새 세션이 이 문서로 컨텍스트 복원하므로 항상 최신 유지.
 
 Skipping (1) is forbidden — work-log is the audit trail.
 Skipping (2) is forbidden — CHANGELOG is the changelog source of truth.
